@@ -1,0 +1,1878 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0}</style></head><body>
+<title>Atmosphera</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-height app. Top bar, globe stage (left, fills), weather panel (right, scrolls). Stacks on phones.
+   One deliberate dark look: deep-space navy, sun-amber accent, sky-blue data. */
+:root{
+  color-scheme:dark;
+  --space:#050912; --panel:#0a1226; --panel-2:#101b38; --line:#1e2c52; --line-2:#2a3b69;
+  --ink:#eaf0ff; --ink-2:#a3b1d6; --ink-3:#7584b0;
+  --sun:#ffb84a; --sky:#5bb8ff; --good:#3ddc97; --mod:#ffd84d; --warn:#ff9f43; --bad:#ff5c7a; --vio:#b58cff;
+  --f-display:'Bricolage Grotesque','Avenir Next',system-ui,sans-serif;
+  --f-body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--space);color:var(--ink);font:14px/1.45 var(--f-body);padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px));overflow-x:hidden}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+.app{height:100%;display:flex;flex-direction:column;min-height:0}
+.top{display:grid;grid-template-columns:auto minmax(200px,330px) minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--space);position:relative;z-index:30}
+.brand{display:flex;align-items:center;gap:10px;font:700 21px/1 var(--f-display);letter-spacing:-.01em;color:var(--ink);text-decoration:none}
+.brand svg{width:30px;height:30px;flex:none}
+.search{position:relative}
+.search input{width:100%;height:40px;border-radius:20px;border:1px solid var(--line-2);background:var(--panel);padding:0 16px 0 40px;outline-offset:0}
+.search input::placeholder{color:var(--ink-3)}
+.search .mag{position:absolute;left:14px;top:12px;width:16px;height:16px;color:var(--ink-3);pointer-events:none}
+#results{position:absolute;top:46px;left:0;right:0;margin:0;padding:6px;list-style:none;background:var(--panel-2);border:1px solid var(--line-2);border-radius:14px;box-shadow:0 20px 50px #000a;max-height:340px;overflow:auto}
+#results li{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border-radius:9px;cursor:pointer}
+#results li small{color:var(--ink-3);font-family:var(--f-mono);font-size:11px;align-self:center}
+#results li[aria-selected="true"],#results li:hover{background:var(--line)}
+.layers{display:flex;gap:4px;justify-content:center;min-width:0;overflow-x:auto;scrollbar-width:none}
+.layers::-webkit-scrollbar{display:none}
+.layers button{display:flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:18px;border:1px solid transparent;background:none;color:var(--ink-2);white-space:nowrap}
+.layers button i{width:8px;height:8px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c)}
+.layers button:hover{color:var(--ink);background:var(--panel)}
+.layers button[aria-pressed="true"]{background:var(--panel-2);border-color:var(--line-2);color:var(--ink)}
+.actions{display:flex;gap:8px;align-items:center}
+.btn{height:38px;padding:0 16px;border-radius:19px;border:1px solid var(--line-2);background:var(--panel);display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn:hover{background:var(--panel-2)}
+.btn.primary{background:var(--sun);color:#1a1100;border-color:var(--sun);font-weight:700}
+.btn.primary:hover{background:#ffc873}
+.btn svg{width:16px;height:16px}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:19px;padding:2px;background:var(--panel)}
+.seg button{height:32px;padding:0 12px;border:0;border-radius:16px;background:none;color:var(--ink-2);font-family:var(--f-mono);font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--line-2);color:var(--ink)}
+
+.main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 420px}
+.stage{position:relative;min-height:0;overflow:hidden;background:radial-gradient(1200px 700px at 40% 45%,#0c1a3a 0%,var(--space) 70%);touch-action:none;outline-offset:-3px}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#globe{cursor:grab}
+#globe.dragging{cursor:grabbing}
+#globe.pointer{cursor:pointer}
+.chip{position:absolute;top:16px;left:16px;display:flex;align-items:center;gap:12px;padding:8px 16px 8px 10px;border-radius:30px;background:#0a1226cc;border:1px solid var(--line-2);backdrop-filter:blur(10px);color:var(--ink);text-align:left;max-width:calc(100% - 32px)}
+.chip svg{width:34px;height:34px;flex:none}
+.chip b{display:block;font:600 15px/1.2 var(--f-display)}
+.chip span{display:block;color:var(--ink-2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .t{font:600 22px/1 var(--f-display);margin-left:4px}
+.controls{position:absolute;left:16px;bottom:16px;display:flex;flex-direction:column;gap:8px}
+.controls button{width:42px;height:42px;border-radius:21px;border:1px solid var(--line-2);background:#0a1226cc;backdrop-filter:blur(10px);display:grid;place-items:center;color:var(--ink)}
+.controls button:hover{background:var(--panel-2)}
+.controls button[aria-pressed="true"]{border-color:var(--sun);color:var(--sun)}
+.controls svg{width:18px;height:18px}
+.zoomread{position:absolute;left:66px;bottom:24px;font:12px var(--f-mono);color:var(--ink-3);pointer-events:none}
+.hint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);padding:7px 14px;border-radius:20px;background:#0a1226cc;border:1px solid var(--line);color:var(--ink-2);font-size:12px;white-space:nowrap;pointer-events:none;transition:opacity .6s}
+.hint.gone{opacity:0}
+.legend{position:absolute;right:16px;bottom:16px;width:min(250px,44%);padding:10px 12px;border-radius:12px;background:#0a1226cc;border:1px solid var(--line);backdrop-filter:blur(10px);pointer-events:none}
+.legend p{margin:0 0 6px;font:500 11px var(--f-mono);color:var(--ink-2);letter-spacing:.04em;text-transform:uppercase}
+.legend .bar{height:8px;border-radius:4px}
+.legend .lbl{display:flex;justify-content:space-between;margin-top:5px;font:11px var(--f-mono);color:var(--ink-3)}
+.tip{position:absolute;pointer-events:none;padding:8px 11px;border-radius:10px;background:#0a1226ee;border:1px solid var(--line-2);font-size:12px;transform:translate(14px,-50%);white-space:nowrap;z-index:5}
+.tip b{font:600 14px var(--f-display)}
+.tip span{color:var(--ink-2)}
+
+.panel{min-height:0;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:22px 22px 28px;display:flex;flex-direction:column;gap:22px;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.eyebrow{margin:0;font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.panel h2{margin:2px 0 2px;font:700 30px/1.1 var(--f-display);letter-spacing:-.015em;text-wrap:balance}
+.meta{margin:0;color:var(--ink-2);font-size:13px}
+.now{display:grid;grid-template-columns:auto 1fr;gap:4px 18px;align-items:center}
+.now .temp{font:600 84px/.9 var(--f-display);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.now .temp sup{font-size:34px;vertical-align:top;position:relative;top:6px;margin-left:2px;color:var(--sun);letter-spacing:0}
+.now .cond{display:flex;align-items:center;gap:8px;min-width:0}
+.now .cond svg{width:56px;height:56px;flex:none}
+.now .cond b{display:block;font:600 17px/1.2 var(--f-display)}
+.now .cond span{display:block;color:var(--ink-2);font-size:12.5px}
+.now .hilo{grid-column:1/-1;display:flex;gap:16px;font:12.5px var(--f-mono);color:var(--ink-2);margin-top:6px}
+.now .hilo b{color:var(--ink);font-weight:500}
+.sec h3{margin:0 0 10px;font:600 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between;align-items:baseline}
+.sec h3 em{font-style:normal;text-transform:none;letter-spacing:0;color:var(--ink-3);font-weight:400}
+.hourly svg{display:block;width:100%;height:auto;overflow:visible}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;min-width:0}
+.tile.wide{grid-column:1/-1}
+.tile h4{margin:0 0 8px;font:500 11px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.big{font:600 30px/1 var(--f-display);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.big small{font:400 13px var(--f-body);color:var(--ink-2);letter-spacing:0;margin-left:4px}
+.sub{margin-top:6px;color:var(--ink-2);font-size:12.5px}
+.aqi-top{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.pill{display:inline-block;padding:3px 10px;border-radius:12px;font:600 12px var(--f-body);color:#07101f;background:var(--c,var(--good))}
+.aqibar{position:relative;height:8px;border-radius:4px;margin:14px 0 6px;background:linear-gradient(90deg,#3ddc97 0 16.6%,#ffd84d 16.6% 33.3%,#ff9f43 33.3% 50%,#ff5c7a 50% 66.6%,#b58cff 66.6% 100%)}
+.aqibar i{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px var(--panel-2);transform:translateX(-2px)}
+.pol{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.pol div{font:12px var(--f-mono);color:var(--ink-2)}
+.pol b{display:block;font:500 15px var(--f-mono);color:var(--ink)}
+.wind-row{display:flex;align-items:center;gap:16px}
+.wind-row svg{width:84px;height:84px;flex:none}
+.sunarc svg{display:block;width:100%;height:auto}
+.sunarc .row{display:flex;justify-content:space-between;font:12.5px var(--f-mono);color:var(--ink-2);margin-top:2px}
+.days{display:flex;flex-direction:column}
+.day{display:grid;grid-template-columns:44px 32px 38px 38px 1fr 38px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font:13px var(--f-mono)}
+.day:first-child{border-top:0}
+.day svg{width:28px;height:28px}
+.day .dn{color:var(--ink);font-family:var(--f-body);font-weight:500}
+.day .pop{color:var(--sky);font-size:11.5px}
+.day .lo{color:var(--ink-3);text-align:right}
+.day .hi{color:var(--ink)}
+.range{position:relative;height:5px;border-radius:3px;background:var(--line)}
+.range i{position:absolute;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--sky),var(--sun))}
+.about{display:grid;grid-template-columns:auto 1fr;gap:9px 18px;margin:0;font-size:13px;padding:2px 2px 0}
+.about dt{color:var(--ink-3)}
+.about dd{margin:0;text-align:right;color:var(--ink);overflow-wrap:anywhere}
+.near{display:flex;flex-direction:column}
+.near button{display:grid;grid-template-columns:1fr auto 44px;gap:10px;align-items:center;text-align:left;padding:10px 4px;border:0;border-top:1px solid var(--line);background:none;color:var(--ink);border-radius:0}
+.near button:first-child{border-top:0}
+.near button:hover{background:var(--panel-2)}
+.near small{display:block;color:var(--ink-3);font-size:12px}
+.near .d{font:12px var(--f-mono);color:var(--ink-3)}
+.near .t{font:500 14px var(--f-mono);text-align:right;color:var(--sun)}
+.reports{display:flex;flex-direction:column;gap:10px}
+.rep{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rep-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cat{display:inline-flex;align-items:center;gap:6px;font:500 12px var(--f-body);color:var(--ink-2)}
+.cat svg{width:15px;height:15px}
+.sev{padding:2px 8px;border-radius:10px;font:600 11px var(--f-body);color:#07101f;background:var(--c)}
+.rep p{margin:0;color:var(--ink);overflow-wrap:anywhere}
+.rep img{max-width:100%;max-height:150px;border-radius:10px;object-fit:cover;align-self:flex-start}
+.rep-f{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--ink-3);font-size:12px}
+.rep-f button{height:28px;padding:0 11px;border-radius:14px;border:1px solid var(--line-2);background:none;color:var(--ink-2);font-size:12px}
+.rep-f button:hover{background:var(--line)}
+.rep-f button[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
+.tag{font:500 10px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line-2);border-radius:8px;padding:1px 6px;color:var(--ink-3)}
+.empty{border:1px dashed var(--line-2);border-radius:14px;padding:16px;color:var(--ink-2);text-align:center}
+.note{font-size:11.5px;color:var(--ink-3);margin:0}
+
+.modal{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:16px;background:#02050dcc;backdrop-filter:blur(6px)}
+.sheet{width:min(560px,100%);max-height:calc(100% - 8px);overflow-y:auto;background:var(--panel);border:1px solid var(--line-2);border-radius:20px;padding:24px;box-shadow:0 30px 80px #000c}
+.sheet h2{margin:0 0 4px;font:700 26px/1.1 var(--f-display);letter-spacing:-.01em}
+.sheet .lead{margin:0 0 18px;color:var(--ink-2)}
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px;border:0;padding:0;min-width:0}
+.field>label,.field>legend{font:500 11px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);padding:0}
+.cats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cats label{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 4px;border-radius:12px;border:1px solid var(--line-2);background:var(--panel-2);font-size:12px;color:var(--ink-2);text-align:center;cursor:pointer}
+.cats input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.cats svg{width:22px;height:22px}
+.cats label:hover{border-color:var(--ink-3)}
+.cats label:has(input:checked){border-color:var(--sun);color:var(--ink);background:#2a2110}
+.cats label:has(input:focus-visible){outline:2px solid var(--sun)}
+.in{width:100%;border-radius:12px;border:1px solid var(--line-2);background:var(--panel-2);padding:10px 12px;outline-offset:0}
+textarea.in{min-height:96px;resize:vertical}
+.sevrow{display:flex;align-items:center;gap:14px}
+.sevrow input{flex:1;accent-color:var(--sun)}
+.sevrow output{min-width:84px;text-align:right;font-weight:700}
+.row2{display:flex;justify-content:space-between;color:var(--ink-3);font-size:12px}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin:-6px 0 8px}
+.foot{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.thumb{max-width:100%;max-height:120px;border-radius:10px;margin-top:4px;align-self:flex-start}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:120;padding:11px 18px;border-radius:24px;background:var(--panel-2);border:1px solid var(--good);box-shadow:0 14px 40px #000a;max-width:calc(100% - 32px)}
+
+.livebadge{position:absolute;right:16px;top:16px;font:600 11px var(--f-mono);letter-spacing:.04em;padding:5px 11px;border-radius:14px;background:#0a1226cc;border:1px solid var(--line-2);color:var(--ink-3);z-index:5}
+.livebadge::before{content:"";display:inline-block;width:7px;height:7px;border-radius:4px;margin-right:7px;background:var(--ink-3)}
+.livebadge[data-s="on"]{color:#7dffb4}.livebadge[data-s="on"]::before{background:#38e08c;box-shadow:0 0 8px #38e08c}
+.livebadge[data-s="load"]::before{background:var(--sun)}.livebadge[data-s="off"]{color:var(--sun)}.livebadge[data-s="off"]::before{background:var(--sun)}
+.savedwrap{position:relative}
+#open-saved{padding:0 14px}
+#open-saved b{font:500 12px var(--f-mono);color:var(--sun)}
+.popover{position:absolute;right:0;top:46px;width:min(340px,calc(100vw - 32px));background:var(--panel-2);border:1px solid var(--line-2);border-radius:16px;padding:14px;box-shadow:0 24px 60px #000b;z-index:40}
+.popover h3{margin:0 0 10px;font:600 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.srow{display:flex;align-items:center;gap:4px;border-top:1px solid var(--line)}
+.srow:first-of-type{border-top:0}
+.srow>button:first-child{flex:1;min-width:0;display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;text-align:left;padding:10px 6px;border:0;background:none;border-radius:8px}
+.srow>button:first-child:hover{background:var(--line)}
+.srow small{display:block;color:var(--ink-3);font-size:12px}
+.srow .aq{font:11px var(--f-mono);color:var(--c)}
+.srow .t{font:500 14px var(--f-mono);color:var(--sun);min-width:34px;text-align:right}
+.srow .x{width:30px;height:30px;border-radius:15px;border:0;background:none;color:var(--ink-3);font-size:18px}
+.srow .x:hover{background:var(--line);color:var(--ink)}
+.acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.chipbtn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:16px;border:1px solid var(--line-2);background:none;color:var(--ink-2);font-size:13px}
+.chipbtn svg{width:15px;height:15px}
+.chipbtn:hover{background:var(--panel-2);color:var(--ink)}
+.chipbtn[aria-pressed="true"]{border-color:var(--sun);color:var(--sun)}
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:flex;gap:12px;align-items:flex-start;padding:11px 14px;border-radius:12px;background:var(--panel-2);border:1px solid var(--c);box-shadow:inset 4px 0 0 var(--c)}
+.alert svg{width:20px;height:20px;flex:none;color:var(--c);margin-top:1px}
+.alert b{display:block;font-weight:700}
+.alert span{display:block;color:var(--ink-2);font-size:13px}
+.advice{display:grid;gap:8px}
+.adv{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:var(--panel-2);border:1px solid var(--line)}
+.adv .ai{width:34px;height:34px;border-radius:17px;flex:none;display:grid;place-items:center;color:var(--c);background:#ffffff0d}
+.adv .ai svg{width:19px;height:19px}
+.adv b{display:block;font-weight:700}
+.adv span{display:block;color:var(--ink-2);font-size:13px}
+.timebar{position:absolute;left:50%;bottom:50px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;border-radius:24px;background:#0a1226cc;border:1px solid var(--line-2);backdrop-filter:blur(10px);width:min(430px,calc(100% - 120px))}
+.timebar button{height:32px;border-radius:16px;border:0;background:var(--line);color:var(--ink);display:grid;place-items:center;padding:0 12px;font:12px var(--f-mono)}
+.timebar #hrs-play{width:32px;padding:0}
+.timebar svg{width:14px;height:14px}
+.timebar .i-pause{display:none}
+.timebar #hrs-play[aria-pressed="true"] .i-pause{display:block}
+.timebar #hrs-play[aria-pressed="true"] .i-play{display:none}
+.timebar input{flex:1;min-width:60px;accent-color:var(--sun)}
+.timebar output{font:12px var(--f-mono);color:var(--ink);min-width:92px;text-align:center;white-space:nowrap}
+.hint{bottom:14px}
+.zoomread{left:20px!important;bottom:auto!important;top:72px}
+@media (max-width:1300px){.legend{top:56px;bottom:auto}}
+.stat{font:600 11px var(--f-body);padding:2px 8px;border-radius:10px;border:1px solid var(--line-2);color:var(--ink-2)}
+.s-seen{color:#07101f;background:var(--sky);border-color:var(--sky)}
+.s-fixed{color:#07101f;background:var(--good);border-color:var(--good)}
+.stsel{height:26px;border-radius:13px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);padding:0 8px;font-size:12px}
+.rep-f{flex-wrap:wrap}
+.rep-btns{display:flex;gap:6px;flex-wrap:wrap}
+.sheet.wide{width:min(820px,100%)}
+.cmpwrap{overflow-x:auto}
+table.cmp{border-collapse:collapse;width:100%;min-width:480px}
+table.cmp th,table.cmp td{padding:10px 12px;text-align:left;border-top:1px solid var(--line);vertical-align:top}
+table.cmp thead th{border-top:0;font:700 16px var(--f-display)}
+table.cmp thead small{display:block;font:400 12px var(--f-body);color:var(--ink-3)}
+table.cmp thead button{margin-top:6px;border:0;background:none;color:var(--ink-3);font-size:12px;text-decoration:underline;padding:0}
+table.cmp tbody th{font:500 12px var(--f-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
+table.cmp td.best{color:var(--sun);font-weight:700;background:#ffb84a14}
+@media (max-width:900px){.timebar{top:auto;bottom:12px;left:64px;right:12px;transform:none;width:auto}.popover{position:fixed;right:16px;left:16px;top:60px;width:auto}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.hl{display:grid;gap:6px}
+.hl>div{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line)}
+.hl span{color:var(--ink-2)}
+.hl b,.hltab a{font:600 14px var(--f-mono);color:var(--sun);text-decoration:none}
+.hl a:hover,.hltab a:hover{text-decoration:underline}
+a.chipbtn{text-decoration:none}
+.linkbtn{border:0;background:none;padding:0;color:var(--sky);text-decoration:underline;font:inherit;cursor:pointer}
+.quick{display:flex;flex-wrap:wrap;gap:8px}
+.quick button{height:34px;padding:0 13px;border-radius:17px;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);font-size:13px}
+.quick button:hover{border-color:var(--sun)}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.fchips button{height:30px;padding:0 12px;border-radius:15px;border:1px solid var(--line-2);background:none;color:var(--ink-2);font-size:12px}
+.fchips button[aria-pressed="true"]{border-color:var(--sun);color:var(--sun)}
+.feedlist{display:grid;gap:8px;max-height:52vh;overflow:auto}
+.feedrow{display:grid;grid-template-columns:auto auto 1fr;gap:6px 10px;align-items:center;text-align:left;padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink)}
+.feedrow:hover{border-color:var(--line-2)}
+.feedrow .ft{grid-column:1/-1;color:var(--ink-2);font-size:13px}
+.feedrow small{grid-column:1/-1;color:var(--ink-3)}
+@media (max-width:700px){.hltxt{display:none}}
+@media (max-width:1560px){.top{grid-template-columns:auto minmax(160px,1fr) auto}.layers{grid-column:1/-1;order:3;justify-content:flex-start}}
+@media (max-width:1100px){.top{grid-template-columns:auto minmax(160px,1fr) auto}.layers{grid-column:1/-1;order:3;justify-content:flex-start}.main{grid-template-columns:minmax(0,1fr) 380px}}
+@media (max-width:900px){
+  html,body{height:auto}
+  .app{height:auto}
+  .top{padding:10px max(16px,env(safe-area-inset-left,0px)) 10px max(16px,env(safe-area-inset-right,0px));gap:10px}
+  .top .search{grid-column:1/-1;order:2}
+  .top{grid-template-columns:1fr auto}
+  .layers{order:3}
+  .main{display:flex;flex-direction:column}
+  .stage{height:min(66vh,560px);min-height:400px;flex:none}
+  .panel{border-left:0;border-top:1px solid var(--line);padding:20px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px));overflow:visible}
+  .hint{display:none}
+  .legend{width:min(190px,50%);top:auto;bottom:64px;right:12px}
+  .livebadge{top:auto;bottom:auto;right:auto;left:16px;top:64px}
+  .controls{bottom:12px;left:12px}
+  .zoomread{display:none}
+}
+@media (max-width:480px){
+  .actions .btn span{display:none}
+  .actions .btn{padding:0 12px}
+  .now .temp{font-size:68px}
+  .day{grid-template-columns:40px 28px 34px 34px 1fr 34px;gap:6px}
+  .cats{grid-template-columns:repeat(3,1fr)}
+  .sheet{padding:18px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <a class="brand" href="#" aria-label="Atmosphera home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#12325f"/><ellipse cx="16" cy="16" rx="14" ry="5.5" transform="rotate(-24 16 16)" fill="none" stroke="#5bb8ff" stroke-width="1.6"/><circle cx="23.5" cy="8.8" r="3" fill="#ffb84a"/><path d="M10 13c3-3 7-2 9 1s-1 6-5 6" fill="none" stroke="#5bb8ff" stroke-width="1.2" opacity=".7"/></svg>
+      Atmosphera
+    </a>
+    <div class="search">
+      <svg class="mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="q" type="search" autocomplete="off" placeholder="Search any city, town or lat, lon" role="combobox" aria-expanded="false" aria-controls="results" aria-label="Search places">
+      <ul id="results" role="listbox" hidden></ul>
+    </div>
+    <nav class="layers" id="layers" aria-label="Globe layer">
+      <button type="button" data-layer="temp" style="--c:#ffb84a" aria-pressed="true"><i></i>Temperature</button>
+      <button type="button" data-layer="aqi" style="--c:#3ddc97" aria-pressed="false"><i></i>Air quality</button>
+      <button type="button" data-layer="wind" style="--c:#5ee0c4" aria-pressed="false"><i></i>Wind</button>
+      <button type="button" data-layer="rain" style="--c:#5bb8ff" aria-pressed="false"><i></i>Rain</button>
+      <button type="button" data-layer="cloud" style="--c:#cfd9f5" aria-pressed="false"><i></i>Clouds</button>
+    </nav>
+    <div class="actions">
+      <div class="seg" role="group" aria-label="Units">
+        <button type="button" id="u-metric" aria-pressed="true">°C</button>
+        <button type="button" id="u-imp" aria-pressed="false">°F</button>
+      </div>
+      <div class="savedwrap">
+        <button type="button" class="btn" id="open-saved" aria-expanded="false" aria-controls="saved-pop" aria-label="Saved places"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg><b id="saved-n">0</b></button>
+        <div class="popover" id="saved-pop" hidden><h3>Saved places</h3><div id="saved-list"></div></div>
+      </div>
+      <button type="button" class="btn" id="open-cmp" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg><span>Compare (0)</span></button>
+      <button type="button" class="btn" id="open-help-top" aria-label="Emergency helplines"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg><span class="hltxt">Helplines</span></button>
+      <button type="button" class="btn primary" id="open-report">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/></svg><span>Report a problem</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="stage" id="stage" tabindex="0" aria-label="Interactive 3D globe. Drag to rotate, scroll or pinch to zoom, click a place for its weather. Arrow keys rotate, plus and minus zoom.">
+      <canvas id="stars" aria-hidden="true"></canvas>
+      <canvas id="globe"></canvas>
+      <button type="button" class="chip" id="chip" aria-label="Jump to details of the selected place"></button>
+      <div class="controls">
+        <button type="button" id="b-spin" aria-pressed="true" aria-label="Auto-rotate" title="Auto-rotate"></button>
+        <button type="button" id="b-in" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button type="button" id="b-out" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        <button type="button" id="b-reset" aria-label="Reset view" title="Reset view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></button>
+        <button type="button" id="b-rep" aria-pressed="true" aria-label="Show community reports on the globe" title="Show community reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/></svg></button>
+      </div>
+      <div class="zoomread" id="zoomread"></div>
+      <div class="livebadge" id="livebadge" data-s="idle" role="status">Modelled data</div>
+      <div class="hint" id="hint">Drag to spin · scroll or pinch to zoom · click any place</div>
+      <div class="legend" id="legend"></div>
+      <div class="timebar" role="group" aria-label="Forecast time for the globe layer">
+        <button type="button" id="hrs-play" aria-pressed="false" aria-label="Play forecast animation" title="Play"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+        <input type="range" id="hrs" min="0" max="48" step="3" value="0" aria-label="Hours ahead" aria-describedby="hrs-l">
+        <output id="hrs-l">Now</output>
+        <button type="button" id="hrs-now" class="nowbtn">Now</button>
+      </div>
+      <div class="tip" id="tip" hidden></div>
+    </section>
+    <aside class="panel" id="panel" aria-live="polite" aria-label="Weather details"></aside>
+  </main>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <form class="sheet" id="repform" role="dialog" aria-modal="true" aria-labelledby="rep-title" novalidate>
+    <h2 id="rep-title">Report a problem</h2>
+    <p class="lead">Tell others what conditions look like right now. Reports appear on the globe and in the place's feed.</p>
+    <fieldset class="field"><legend>What is wrong</legend><div class="cats" id="rep-cats"></div></fieldset>
+    <div class="field"><label for="rep-place">Place</label><input class="in" id="rep-place" maxlength="80" autocomplete="off"></div>
+    <div class="field"><label for="rep-sev">How serious</label>
+      <div class="sevrow"><input type="range" id="rep-sev" min="1" max="4" step="1" value="2"><output id="rep-sevout" for="rep-sev">Moderate</output></div>
+      <div class="row2"><span>Minor</span><span>Critical</span></div></div>
+    <div class="field"><label for="rep-desc">What you see</label><textarea class="in" id="rep-desc" maxlength="280" placeholder="Example: water knee-deep on the main road near the station, buses stopped"></textarea><div class="row2"><span></span><span id="rep-count">0 / 280</span></div></div>
+    <div class="field"><label for="rep-photo">Photo (optional)</label><input class="in" id="rep-photo" type="file" accept="image/*"><img class="thumb" id="rep-thumb" alt="Selected photo preview" hidden></div>
+    <p class="note" style="margin:0 0 12px"><b style="color:var(--ink-2)">If someone is in danger, contact emergency services first.</b> <span id="rep-help"></span></p>
+    <p class="err" id="rep-err" role="alert"></p>
+    <div class="foot"><button type="button" class="btn" id="rep-cancel">Cancel</button><button type="submit" class="btn primary">Post report</button></div>
+  </form>
+</div>
+<div class="modal" id="feedmodal" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="feed-title">
+    <h2 id="feed-title">Reports from around the world</h2>
+    <p class="lead">Newest first. Tap a report to open its place on the globe.</p>
+    <div class="fchips" id="feedchips"></div>
+    <div class="feedlist" id="feedlist"></div>
+    <div class="foot" style="margin-top:16px"><button type="button" class="btn" id="feed-close">Close</button></div>
+  </div>
+</div>
+<div class="modal" id="helpmodal" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <h2 id="help-title">Emergency helplines</h2>
+    <p class="lead">National numbers for ambulance and hospitals, fire brigade and police. In danger, call first and report here afterwards.</p>
+    <label class="field" style="display:block;margin-bottom:10px"><span class="sr">Search country</span><input id="helpq" type="search" placeholder="Search a country" autocomplete="off" style="width:100%;height:40px;border-radius:12px;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);padding:0 12px"></label>
+    <div class="cmpwrap" id="helplist" style="max-height:52vh;overflow:auto"></div>
+    <div class="foot" style="margin-top:16px"><button type="button" class="btn" id="help-close">Close</button></div>
+  </div>
+</div>
+<div class="modal" id="cmpmodal" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="cmp-title">
+    <h2 id="cmp-title">Compare places</h2>
+    <p class="lead">Side by side, with the best value in each row highlighted.</p>
+    <div id="cmpbody"></div>
+    <div class="foot" style="margin-top:16px"><button type="button" class="btn" id="cmp-close">Close</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+(function(){'use strict';
+const LAND_POLYS=[
+// North America
+[[-168,66],[-162,70],[-156,71.5],[-141,69.5],[-128,70],[-115,68.5],[-95,72],[-90,68],[-82,69],[-85,66],[-93,62],[-94,58],[-88,56],[-82,55],[-79,51.5],[-79,55],[-77,60],[-72,62],[-65,60],[-62,57],[-56,52],[-60,48],[-66,50],[-65,45.5],[-70,43.5],[-70,41.7],[-74,40.3],[-76,37],[-76,35],[-81,31],[-80,26.5],[-81,25.2],[-83,29],[-85,30],[-89,30],[-91,29.2],[-94,29.5],[-97.3,27],[-97.5,22],[-96,19],[-94.5,18.2],[-91,18.7],[-90.5,21],[-87,21.5],[-88,16],[-84,15.8],[-83.3,11],[-81.5,8.8],[-79,9.5],[-77.4,8.6],[-78,7],[-80,7.3],[-82,8],[-85.7,10],[-87.5,13],[-91.5,14],[-94.5,16],[-97,15.8],[-101,17.3],[-105.5,20],[-105.5,23],[-109,25.5],[-112.5,29.5],[-114.8,31.5],[-113,28.5],[-110.5,24],[-112,25],[-115,29],[-117,32.5],[-120.5,34.5],[-123,38],[-124.3,40.5],[-124,46],[-124.7,48.4],[-123,49],[-127,51],[-130,54.5],[-134,58],[-140,59.8],[-148,60.5],[-152,59],[-158,56.5],[-164,54.7],[-158,58.7],[-162,60],[-165,62.5],[-161,64.5],[-168,65.5]],
+// Greenland
+[[-73,78],[-60,82],[-30,83.5],[-18,81.5],[-20,76],[-19,70],[-24,69.5],[-32,68],[-40,65],[-43,60],[-48,61],[-53,66],[-55,70],[-60,76],[-68,76]],
+// Baffin, Ellesmere, Victoria, Newfoundland
+[[-80,73.5],[-72,71.5],[-67,69],[-62,66.5],[-66,63],[-72,64],[-78,64.5],[-74,68],[-82,70]],
+[[-90,80],[-75,83],[-62,82.5],[-75,78.5],[-82,76.5],[-90,76.5]],
+[[-118,71.5],[-105,73],[-100,70],[-108,68.5],[-117,69.5]],
+[[-59.3,47.6],[-55,51.5],[-52.7,47.5],[-55,46.8]],
+// Cuba, Hispaniola
+[[-85,22],[-80,23.2],[-74,20.2],[-77.5,19.9],[-81,22]],
+[[-74.4,18.5],[-72,19.9],[-68.4,18.6],[-71.5,17.7]],
+// South America
+[[-77.4,8.6],[-75.5,10.5],[-72,12],[-71.5,10.5],[-68,10.6],[-62,10.7],[-60,8.5],[-57,6],[-52,5],[-50,1.5],[-50,-1],[-44.5,-2.5],[-40,-2.8],[-35,-5.5],[-35,-9],[-37,-12],[-39,-18],[-41,-22],[-44,-23],[-48.5,-26],[-48.7,-28.5],[-52,-32],[-53.5,-34],[-57,-35],[-57.5,-38],[-62,-39],[-65,-41],[-64,-43],[-66,-47],[-67.5,-50],[-69,-52],[-68.5,-54],[-71,-54.2],[-74,-52],[-75.5,-48],[-74,-43],[-73.5,-37],[-71.6,-32],[-71.5,-27],[-70.3,-18.5],[-76,-14],[-79,-9],[-81.2,-6],[-80.3,-3],[-81,-1],[-80,1],[-78.5,2.5],[-77.3,4],[-77.5,7]],
+// Africa
+[[-5.9,35.8],[-2,35.1],[3,36.8],[10,37.2],[11,33.5],[15.5,32.3],[20,31],[20,32.8],[25,32.5],[32,31.2],[34.2,27.9],[37,21.5],[39,15.5],[43,12.5],[51.2,11.8],[51,10.4],[47,4],[41,-1.5],[39,-5],[40.5,-11],[40.7,-15],[35,-20],[35.5,-24],[32.7,-26.2],[32.5,-29],[28,-33],[24,-34.2],[19,-34.8],[18,-32],[15,-27],[12,-18],[13.5,-12],[12,-5],[9,-1],[9.5,3.5],[6,4.3],[2,6.2],[-4,5.2],[-8,4.5],[-11,6.8],[-13.2,9],[-15,11.5],[-17.5,14.7],[-16.5,19.5],[-16,23.8],[-13,27.8],[-10,29.7],[-9.7,31.5],[-6.8,34]],
+// Madagascar
+[[49.3,-12],[50.4,-15.5],[47.5,-25],[44,-25],[43.3,-21],[44.5,-16.5],[47,-14.5]],
+// Eurasia
+[[-5.6,36],[-2,36.8],[0,38.7],[3,41.8],[3.5,43.4],[7,43.5],[9,44.3],[10.5,43],[12.5,41.5],[15.5,40],[16,38],[16.6,39.5],[18.5,40.1],[16,41.8],[13,43.7],[12.3,45.3],[13.7,45.6],[15.2,44],[19,41.5],[19.5,40],[21.5,37],[23.2,38],[22.8,40.4],[26,40.8],[26.5,39.5],[27,37.5],[28.5,36.7],[30.5,36.3],[32.5,36.1],[34.5,36.7],[36,36.8],[36,35],[35.1,33.5],[34.6,31.8],[34.9,29.5],[35,28],[36.5,26],[39,22],[41,19],[43,16],[43.7,12.7],[45,12.8],[48.5,14],[52,15.7],[55,17.5],[57.5,19],[59.8,22.5],[58.5,24],[56.5,26.2],[56,27],[54,26.7],[51,24.5],[50.8,26],[49.5,28],[48,30],[50,30.3],[52,27.5],[54.5,26.5],[57,25.7],[61.5,25.2],[66.5,25.4],[68.5,23.5],[70,21],[72.8,21],[72.8,19.1],[73.5,16],[74.7,12.5],[76.2,9.5],[77.5,8.1],[78.5,9],[80,10.3],[80.2,13],[80,15.5],[82,17],[85,19.5],[87,21.5],[89,21.8],[91,22.5],[92.5,20.5],[94,18],[94.5,16],[97.5,16.5],[98.4,13],[98.6,9],[100,6.5],[101,3],[103.5,1.3],[104.2,1.5],[103,5],[102.2,7],[100.5,10.5],[99.5,11.5],[100,13.3],[102.5,12],[105,8.7],[106.5,10],[109.3,12],[108,15],[106,18.5],[106.5,20.7],[108,21.6],[110,20.3],[111,21.6],[114,22.2],[117,23.3],[119.5,25.5],[121.5,28.5],[121.6,31],[119.5,34.5],[121,37],[122.5,37.4],[119,38],[118,39],[121,40.8],[122.5,40],[125,39.5],[125,38],[126.5,37],[126.3,34.7],[128.8,35],[129.4,36.8],[129.2,38.5],[127.5,39.8],[128,40.8],[130.7,42.3],[133,42.8],[135,43.8],[138.5,47.5],[140.5,50],[141,52.5],[140.5,54],[137,54],[135.3,54.7],[140,56],[142,59],[149,59.5],[154,59.2],[156.5,57],[156.8,51],[158,53],[162,55.5],[163.5,58],[163,60],[170,60],[176,62.5],[179.5,65],[177,68],[170,69.9],[160,69.5],[150,71.4],[140,72.5],[130,71],[125,73.4],[115,73.6],[112.5,75.9],[105,77.5],[100,76.5],[95,76],[87,74.5],[80,72.5],[80.5,69.5],[73.5,68.5],[69,73],[68,69],[64,69.3],[60,68.7],[53,68.8],[44,68.5],[42,66.5],[34.5,66.5],[40.5,64.5],[37,63.8],[34.5,64.5],[33,66],[30.5,69.9],[25,71],[18.5,69.5],[14,67.5],[11,64.3],[5.5,62],[5,59],[7,58],[10.5,59.5],[11.2,58.8],[12.5,56.5],[11,55.5],[8.5,56.8],[8,55.5],[9,54.3],[8.5,53.7],[7,53.5],[4.5,52.5],[3.5,51.4],[1.5,50.9],[-1.5,49.7],[-1.8,48.6],[-4.5,48.5],[-3,47.5],[-1.5,46],[-1.2,44.5],[-1.8,43.4],[-8,43.7],[-9.3,43.1],[-8.9,41.5],[-9.5,38.7],[-8.9,37.1],[-7.4,37.2],[-6.2,36.5]],
+// Islands
+[[-5.7,50],[1.4,51.2],[1.7,52.7],[0.2,53.5],[-1.5,55],[-2,56.2],[-1.8,57.6],[-3.5,58.6],[-5,58.6],[-6,57],[-5.6,55.5],[-3,54.9],[-3.2,53.4],[-4.6,52.8],[-4.2,51.6]],
+[[-10,51.8],[-6.2,52.2],[-6,54],[-6.2,55.2],[-8.3,55],[-10,53.9]],
+[[-24,65.5],[-22,66.4],[-16,66.5],[-13.5,65],[-18,63.4],[-22.5,63.8]],
+[[11,78.5],[16,80.2],[25,80.3],[27,79],[20,77.5],[14,77.5]],
+[[52,71],[55,73.5],[60,76.5],[68,77],[60,74],[56,71],[53,70.8]],
+[[12.5,38],[15.6,38.2],[15.1,36.7],[12.7,37.5]],
+[[8.2,41],[9.7,40.9],[9.5,39],[8.4,39]],
+[[79.8,9.3],[81.8,7.5],[81.2,6],[80,6],[79.7,7.5]],
+[[120.2,23],[121.9,25],[121.5,22]],
+[[130.9,34],[132.5,35.5],[136,36],[137,37.5],[139.5,38.5],[140,40.5],[141.5,41.4],[141.8,39],[140.8,36],[139.8,35],[137,34.6],[135.2,33.5],[133,33.9]],
+[[140,41.5],[141.5,45.5],[145.3,43.5],[143,42],[141,41.8]],
+[[129.8,33.3],[131.5,34],[131.5,31.4],[130.5,31],[129.7,32.5]],
+[[142,46],[143,49.5],[143,54],[142,54],[142,50]],
+[[120,18.5],[122.2,18.5],[122,16],[124,13.5],[121,13.8],[120,15.5]],
+[[122,8],[125.5,9.8],[126.5,7],[125.5,5.8],[123,7.3]],
+[[109,1.5],[111,2],[113,3.2],[117,7],[119,5],[118,1],[116,-3.8],[114.5,-4],[110.5,-3],[109,-1]],
+[[95.3,5.6],[98.5,4],[103,1],[106,-3],[105.8,-5.8],[102,-4],[98,0.2],[95.5,3]],
+[[105.2,-6.8],[108,-6.3],[111,-6.5],[114.5,-7.8],[112,-8.4],[106.5,-7.5]],
+[[119.4,-5.5],[119.8,0],[121,1.2],[125,1.6],[123.2,0.3],[121.5,-1],[123.2,-4.2],[121,-3.5],[120.5,-5.5]],
+[[131,-1],[135,-3.3],[141,-2.6],[147,-6],[150.5,-10.5],[146,-8.2],[143.5,-9],[141,-9.2],[138,-8.3],[137.7,-5],[134,-3.8]],
+// Australia, Tasmania, New Zealand
+[[114,-22],[113.5,-26],[115,-34],[118,-35],[123.5,-34],[129,-31.5],[132,-32],[135,-34.8],[137.5,-33.5],[138,-35.5],[140,-37.8],[144,-38.5],[146.3,-39],[150,-37.5],[151,-33.5],[153.5,-28.5],[153,-25],[149,-21],[146,-19],[145.4,-14.8],[143.5,-14],[142.5,-10.8],[141.5,-13.5],[140,-17.5],[136,-15.8],[136.8,-12.2],[132,-11.3],[130,-13],[127,-14],[126,-14.2],[123,-17],[122,-18],[119,-20],[116.5,-20.7]],
+[[144.7,-40.8],[148.3,-40.9],[147.9,-43.3],[146,-43.6]],
+[[172.7,-34.5],[175.5,-37],[178.5,-37.7],[177,-39.3],[175,-41.5],[173.8,-39.5]],
+[[172.8,-40.5],[174.3,-41.5],[171,-44.5],[170.5,-46.3],[166.5,-46],[168,-44],[171.5,-41.5]],
+// Antarctica
+[[-180,-84],[-150,-78],[-120,-74],[-100,-73],[-75,-73],[-62,-65],[-58,-63.5],[-64,-66],[-60,-74],[-45,-78],[-30,-77],[-15,-71],[0,-70],[20,-69.5],[45,-67],[65,-67.5],[75,-69.5],[90,-66],[110,-66],[135,-66],[150,-69],[165,-71.5],[170,-77],[180,-78],[180,-90],[-180,-90]]
+];
+const LAKE_POLYS=[
+[[28.7,43.5],[31,41.2],[35,42],[38,41],[41.5,41.5],[40,43.5],[37.5,44.8],[35,45.3],[33,44.4],[32,46.3],[30.5,46.5],[29.7,45.2]],
+[[47,45],[50,46.8],[53,45.5],[51,43.2],[52.8,41.2],[53,39],[54,37.2],[50.5,37],[49,38.5],[49.5,40.5],[47.5,43]],
+[[11.5,56.5],[12.5,54.5],[14,54],[19,54.5],[21,57],[21.5,59],[23,59.5],[28,60],[30.2,60],[25,60.5],[22,60.5],[21.5,63],[25,65.2],[22,65.8],[19,63.5],[17.5,60.8],[19,59.5],[18,58.5],[16.5,56.5],[14.5,56],[13,55.4]]
+];
+
+const CITY_RAW=`Tokyo|JP|35.68|139.69|1
+Delhi|IN|28.61|77.21|1
+Shanghai|CN|31.23|121.47|1
+São Paulo|BR|-23.55|-46.63|1
+Mexico City|MX|19.43|-99.13|1
+Cairo|EG|30.04|31.24|1
+Mumbai|IN|19.08|72.88|1
+Beijing|CN|39.90|116.41|1
+Dhaka|BD|23.81|90.41|1
+New York|US|40.71|-74.01|1
+Karachi|PK|24.86|67.01|1
+Buenos Aires|AR|-34.60|-58.38|1
+Istanbul|TR|41.01|28.98|1
+Lagos|NG|6.52|3.38|1
+Los Angeles|US|34.05|-118.24|1
+London|GB|51.51|-0.13|1
+Moscow|RU|55.76|37.62|1
+Paris|FR|48.86|2.35|1
+Jakarta|ID|-6.21|106.85|1
+Kinshasa|CD|-4.44|15.27|1
+Lima|PE|-12.05|-77.04|1
+Bangkok|TH|13.76|100.50|1
+Seoul|KR|37.57|126.98|1
+Sydney|AU|-33.87|151.21|1
+Singapore|SG|1.35|103.82|1
+Johannesburg|ZA|-26.20|28.05|1
+Dubai|AE|25.20|55.27|1
+Bengaluru|IN|12.97|77.59|1
+Kolkata|IN|22.57|88.36|2
+Chennai|IN|13.08|80.27|2
+Hyderabad|IN|17.39|78.48|2
+Pune|IN|18.52|73.86|2
+Ahmedabad|IN|23.02|72.57|2
+Chicago|US|41.88|-87.63|2
+Toronto|CA|43.65|-79.38|2
+Madrid|ES|40.42|-3.70|2
+Rome|IT|41.90|12.50|2
+Berlin|DE|52.52|13.40|2
+Tehran|IR|35.69|51.39|2
+Baghdad|IQ|33.31|44.36|2
+Riyadh|SA|24.71|46.68|2
+Nairobi|KE|-1.29|36.82|2
+Addis Ababa|ET|9.03|38.74|2
+Cape Town|ZA|-33.92|18.42|2
+Casablanca|MA|33.57|-7.59|2
+Rio de Janeiro|BR|-22.91|-43.17|2
+Bogotá|CO|4.71|-74.07|2
+Santiago|CL|-33.45|-70.67|2
+Caracas|VE|10.48|-66.90|2
+Houston|US|29.76|-95.37|2
+Miami|US|25.76|-80.19|2
+San Francisco|US|37.77|-122.42|2
+Vancouver|CA|49.28|-123.12|2
+Manila|PH|14.60|120.98|2
+Ho Chi Minh City|VN|10.82|106.63|2
+Hanoi|VN|21.03|105.85|2
+Kuala Lumpur|MY|3.14|101.69|2
+Hong Kong|HK|22.32|114.17|2
+Taipei|TW|25.03|121.57|2
+Osaka|JP|34.69|135.50|2
+Melbourne|AU|-37.81|144.96|2
+Auckland|NZ|-36.85|174.76|2
+Lahore|PK|31.55|74.34|2
+Colombo|LK|6.93|79.86|2
+Kathmandu|NP|27.72|85.32|2
+Kyiv|UA|50.45|30.52|2
+Stockholm|SE|59.33|18.07|2
+Athens|GR|37.98|23.73|2
+Lisbon|PT|38.72|-9.14|2
+Accra|GH|5.60|-0.19|2
+Dakar|SN|14.72|-17.47|2
+Luanda|AO|-8.84|13.23|2
+Dar es Salaam|TZ|-6.79|39.21|2
+Novosibirsk|RU|55.01|82.93|2
+Almaty|KZ|43.24|76.89|2
+Tashkent|UZ|41.30|69.24|2
+Jaipur|IN|26.91|75.79|3
+Lucknow|IN|26.85|80.95|3
+Nagpur|IN|21.15|79.09|3
+Surat|IN|21.17|72.83|3
+Nashik|IN|19.99|73.79|3
+Kochi|IN|9.93|76.27|3
+Panaji|IN|15.50|73.83|3
+Varanasi|IN|25.32|82.97|3
+Chandigarh|IN|30.73|76.78|3
+Bhopal|IN|23.26|77.41|3
+Indore|IN|22.72|75.86|3
+Vadodara|IN|22.31|73.18|3
+Guwahati|IN|26.14|91.74|3
+Thiruvananthapuram|IN|8.52|76.94|3
+Visakhapatnam|IN|17.69|83.22|3
+Mysuru|IN|12.30|76.64|3
+Amritsar|IN|31.63|74.87|3
+Abu Dhabi|AE|24.45|54.38|3
+Doha|QA|25.29|51.53|3
+Muscat|OM|23.59|58.41|3
+Tel Aviv|IL|32.09|34.78|3
+Amman|JO|31.95|35.93|3
+Beirut|LB|33.89|35.50|3
+Tunis|TN|36.81|10.18|3
+Algiers|DZ|36.75|3.06|3
+Tripoli|LY|32.89|13.19|3
+Khartoum|SD|15.50|32.56|3
+Kampala|UG|0.35|32.58|3
+Lusaka|ZM|-15.39|28.32|3
+Harare|ZW|-17.83|31.05|3
+Maputo|MZ|-25.97|32.57|3
+Antananarivo|MG|-18.88|47.51|3
+Vienna|AT|48.21|16.37|3
+Prague|CZ|50.08|14.44|3
+Warsaw|PL|52.23|21.01|3
+Budapest|HU|47.50|19.04|3
+Oslo|NO|59.91|10.75|3
+Helsinki|FI|60.17|24.94|3
+Dublin|IE|53.35|-6.26|3
+Edinburgh|GB|55.95|-3.19|3
+Amsterdam|NL|52.37|4.90|3
+Zurich|CH|47.38|8.54|3
+Barcelona|ES|41.39|2.17|3
+Milan|IT|45.46|9.19|3
+Vladivostok|RU|43.12|131.89|3
+Yakutsk|RU|62.04|129.74|3
+Ulaanbaatar|MN|47.89|106.91|3
+Shenzhen|CN|22.54|114.06|3
+Chengdu|CN|30.57|104.07|3
+Urumqi|CN|43.83|87.62|3
+Lhasa|CN|29.65|91.12|3
+Busan|KR|35.18|129.08|3
+Sapporo|JP|43.06|141.35|3
+Perth|AU|-31.95|115.86|3
+Brisbane|AU|-27.47|153.03|3
+Darwin|AU|-12.46|130.84|3
+Honolulu|US|21.31|-157.86|3
+Anchorage|US|61.22|-149.90|3
+Denver|US|39.74|-104.99|3
+Seattle|US|47.61|-122.33|3
+Phoenix|US|33.45|-112.07|3
+Atlanta|US|33.75|-84.39|3
+Boston|US|42.36|-71.06|3
+Montréal|CA|45.50|-73.57|3
+Havana|CU|23.11|-82.37|3
+Panama City|PA|8.98|-79.52|3
+Quito|EC|-0.18|-78.47|3
+La Paz|BO|-16.50|-68.15|3
+Brasília|BR|-15.79|-47.88|3
+Manaus|BR|-3.12|-60.02|3
+Montevideo|UY|-34.90|-56.16|3
+Asunción|PY|-25.26|-57.58|3
+Reykjavik|IS|64.15|-21.94|4
+Tromsø|NO|69.65|18.96|4
+Longyearbyen|SJ|78.22|15.65|4
+Nuuk|GL|64.18|-51.72|4
+Leh|IN|34.17|77.58|4
+Shimla|IN|31.10|77.17|4
+Lonavala|IN|18.75|73.41|4
+Mahabaleshwar|IN|17.92|73.66|4
+Ooty|IN|11.41|76.70|4
+Munnar|IN|10.09|77.06|4
+Manali|IN|32.24|77.19|4
+Darjeeling|IN|27.04|88.27|4
+Rishikesh|IN|30.09|78.27|4
+Hampi|IN|15.34|76.46|4
+Pushkar|IN|26.49|74.55|4
+Alibag|IN|18.64|72.87|4
+Kolhapur|IN|16.70|74.24|4
+Satara|IN|17.68|74.00|4
+Ushuaia|AR|-54.80|-68.30|4
+Punta Arenas|CL|-53.16|-70.91|4
+Hobart|AU|-42.88|147.33|4
+Alice Springs|AU|-23.70|133.88|4
+Queenstown|NZ|-45.03|168.66|4
+Papeete|PF|-17.54|-149.57|4
+Malé|MV|4.18|73.51|4
+Zanzibar|TZ|-6.16|39.20|4
+Timbuktu|ML|16.77|-3.00|4
+Tamanrasset|DZ|22.79|5.52|4
+Siwa Oasis|EG|29.20|25.52|4
+Kashgar|CN|39.47|75.99|4
+Cusco|PE|-13.53|-71.97|4
+Puerto Ayora|EC|-0.74|-90.31|4
+Tórshavn|FO|62.01|-6.77|4
+Dawson City|CA|64.06|-139.43|4
+Banff|CA|51.18|-115.57|4
+Sedona|US|34.87|-111.76|4
+Key West|US|24.56|-81.78|4
+Santorini|GR|36.39|25.46|4
+Chamonix|FR|45.92|6.87|4
+Zermatt|CH|46.02|7.75|4
+Hallstatt|AT|47.56|13.65|4
+Ubud|ID|-8.51|115.26|4
+Luang Prabang|LA|19.89|102.13|4
+Pokhara|NP|28.21|83.99|4`;
+const POLL={Delhi:232,Lahore:214,Dhaka:182,Kolkata:164,Karachi:152,Mumbai:122,Pune:108,Beijing:112,Cairo:131,Jakarta:124,Lagos:112,Kinshasa:92,Kathmandu:140,Lucknow:176,Varanasi:158,Chandigarh:118,Amritsar:150,Ahmedabad:116,Nagpur:98,Hanoi:128,Tehran:104,Baghdad:118,Riyadh:96,Chengdu:101,Urumqi:92,'Ho Chi Minh City':88,Bangkok:94,Bhopal:92,Indore:84,Jaipur:122,Guwahati:76,Ulaanbaatar:126,'Los Angeles':74,Santiago:68,'Mexico City':82,Lima:72,Hyderabad:84,Chennai:74,Bengaluru:62,Surat:96,Kolhapur:72,Nashik:80,Shanghai:78,Seoul:70,Tashkent:110,Almaty:94,Khartoum:100,Accra:66};
+const ALT={Leh:3500,Kathmandu:1400,Lhasa:3650,Quito:2850,'La Paz':3640,'Mexico City':2240,Bogotá:2640,'Addis Ababa':2355,Nairobi:1795,Shimla:2200,Manali:2050,Darjeeling:2040,Ooty:2240,Munnar:1600,Mahabaleshwar:1370,Lonavala:625,Cusco:3400,Denver:1600,Johannesburg:1750,Zermatt:1600,Chamonix:1035,Banff:1380,Pune:560,Bengaluru:920,Almaty:800,Ulaanbaatar:1350,Urumqi:800,Antananarivo:1280,Harare:1480,Lusaka:1280,Kampala:1200,Tehran:1190,Madrid:650,Sedona:1330,Kashgar:1290,Tamanrasset:1400,Hampi:480,Pushkar:510,Mysuru:770,Bhopal:520,Jaipur:430,Nagpur:310,Chandigarh:330,Pokhara:820,Hyderabad:540,Kolhapur:550,Satara:700,Phoenix:330,Brasília:1170,Asunción:60,Riyadh:610,Chengdu:500,Novosibirsk:150};
+const DRY=new Set(['Cairo','Riyadh','Dubai','Tamanrasset','Siwa Oasis','Phoenix','Baghdad','Tehran','Abu Dhabi','Doha','Muscat','Khartoum','Timbuktu','Alice Springs','Sedona','Urumqi','Kashgar','Tripoli','Leh','Lima','Amman','Tel Aviv','Karachi','Lahore','Delhi','Jaipur','Pushkar','Almaty','Tashkent','Perth']);
+
+/* Extra places: Name|CC|lat|lon|State or province|population (thousands, approx.)|elevation (m) */
+const CITY_X=`Ghaziabad|IN|28.67|77.42|Uttar Pradesh|1730|214
+Noida|IN|28.54|77.39|Uttar Pradesh|640|200
+Gurugram|IN|28.46|77.03|Haryana|1050|217
+Faridabad|IN|28.41|77.31|Haryana|1400|198
+Kanpur|IN|26.45|80.35|Uttar Pradesh|2900|126
+Agra|IN|27.18|78.02|Uttar Pradesh|1590|169
+Prayagraj|IN|25.43|81.85|Uttar Pradesh|1110|98
+Meerut|IN|28.98|77.71|Uttar Pradesh|1420|219
+Ludhiana|IN|30.90|75.86|Punjab|1620|244
+Jalandhar|IN|31.33|75.58|Punjab|870|228
+Patiala|IN|30.34|76.39|Punjab|405|250
+Dehradun|IN|30.32|78.03|Uttarakhand|580|640
+Haridwar|IN|29.95|78.16|Uttarakhand|230|314
+Srinagar|IN|34.08|74.80|Jammu and Kashmir|1190|1585
+Jammu|IN|32.73|74.86|Jammu and Kashmir|500|327
+Ambala|IN|30.38|76.78|Haryana|210|264
+Jodhpur|IN|26.24|73.02|Rajasthan|1140|231
+Udaipur|IN|24.58|73.71|Rajasthan|470|598
+Jaisalmer|IN|26.92|70.91|Rajasthan|65|225
+Kota|IN|25.18|75.84|Rajasthan|1000|271
+Ajmer|IN|26.45|74.64|Rajasthan|550|486
+Bikaner|IN|28.02|73.31|Rajasthan|650|224
+Mount Abu|IN|24.59|72.71|Rajasthan|23|1220
+Gwalior|IN|26.22|78.18|Madhya Pradesh|1100|197
+Jabalpur|IN|23.18|79.99|Madhya Pradesh|1270|412
+Ujjain|IN|23.18|75.78|Madhya Pradesh|515|491
+Raipur|IN|21.25|81.63|Chhattisgarh|1010|298
+Ranchi|IN|23.34|85.31|Jharkhand|1070|651
+Jamshedpur|IN|22.80|86.20|Jharkhand|630|135
+Dhanbad|IN|23.80|86.43|Jharkhand|1160|222
+Patna|IN|25.59|85.14|Bihar|1680|53
+Gaya|IN|24.80|85.00|Bihar|470|111
+Bhubaneswar|IN|20.30|85.82|Odisha|890|45
+Cuttack|IN|20.46|85.88|Odisha|610|36
+Puri|IN|19.81|85.83|Odisha|200|3
+Howrah|IN|22.59|88.26|West Bengal|1070|12
+Siliguri|IN|26.73|88.43|West Bengal|510|122
+Durgapur|IN|23.55|87.32|West Bengal|580|65
+Asansol|IN|23.68|86.98|West Bengal|1200|110
+Gangtok|IN|27.33|88.61|Sikkim|100|1650
+Shillong|IN|25.57|91.88|Meghalaya|145|1496
+Imphal|IN|24.82|93.94|Manipur|270|786
+Aizawl|IN|23.73|92.72|Mizoram|290|1132
+Kohima|IN|25.67|94.11|Nagaland|100|1261
+Agartala|IN|23.83|91.28|Tripura|400|13
+Itanagar|IN|27.10|93.62|Arunachal Pradesh|60|320
+Dibrugarh|IN|27.48|94.91|Assam|155|108
+Port Blair|IN|11.62|92.73|Andaman and Nicobar Islands|140|16
+Rajkot|IN|22.30|70.80|Gujarat|1290|128
+Bhavnagar|IN|21.76|72.15|Gujarat|600|24
+Gandhinagar|IN|23.22|72.64|Gujarat|290|81
+Jamnagar|IN|22.47|70.06|Gujarat|600|20
+Bhuj|IN|23.25|69.67|Gujarat|150|110
+Dwarka|IN|22.24|68.97|Gujarat|40|8
+Aurangabad|IN|19.88|75.34|Maharashtra|1180|568
+Solapur|IN|17.66|75.91|Maharashtra|950|458
+Thane|IN|19.22|72.98|Maharashtra|1840|10
+Navi Mumbai|IN|19.03|73.03|Maharashtra|1120|10
+Pimpri-Chinchwad|IN|18.63|73.80|Maharashtra|1730|580
+Amravati|IN|20.93|77.75|Maharashtra|650|343
+Sangli|IN|16.85|74.57|Maharashtra|500|549
+Nanded|IN|19.15|77.32|Maharashtra|550|357
+Shirdi|IN|19.77|74.48|Maharashtra|36|498
+Panchgani|IN|17.92|73.82|Maharashtra|17|1334
+Matheran|IN|18.99|73.27|Maharashtra|5|800
+Ratnagiri|IN|16.99|73.30|Maharashtra|75|10
+Margao|IN|15.27|73.96|Goa|95|10
+Mangaluru|IN|12.91|74.86|Karnataka|485|22
+Hubballi|IN|15.36|75.12|Karnataka|940|671
+Belagavi|IN|15.85|74.50|Karnataka|490|762
+Madikeri|IN|12.42|75.74|Karnataka|35|1170
+Gokarna|IN|14.55|74.32|Karnataka|25|10
+Coimbatore|IN|11.02|76.96|Tamil Nadu|1050|411
+Madurai|IN|9.93|78.12|Tamil Nadu|1020|134
+Tiruchirappalli|IN|10.79|78.70|Tamil Nadu|860|88
+Salem|IN|11.66|78.15|Tamil Nadu|830|278
+Rameswaram|IN|9.29|79.31|Tamil Nadu|45|10
+Kanyakumari|IN|8.08|77.54|Tamil Nadu|20|3
+Kodaikanal|IN|10.24|77.49|Tamil Nadu|36|2133
+Puducherry|IN|11.93|79.83|Puducherry|240|3
+Vijayawada|IN|16.51|80.65|Andhra Pradesh|1050|11
+Tirupati|IN|13.63|79.42|Andhra Pradesh|375|161
+Guntur|IN|16.31|80.44|Andhra Pradesh|650|33
+Warangal|IN|17.97|79.60|Telangana|620|266
+Kozhikode|IN|11.26|75.78|Kerala|610|1
+Thrissur|IN|10.53|76.21|Kerala|315|2
+Alappuzha|IN|9.49|76.34|Kerala|175|1
+Kollam|IN|8.89|76.61|Kerala|350|5
+Kavaratti|IN|10.57|72.64|Lakshadweep|11|2
+Philadelphia|US|39.95|-75.17|Pennsylvania|1600|12
+San Antonio|US|29.42|-98.49|Texas|1500|198
+San Diego|US|32.72|-117.16|California|1390|19
+Dallas|US|32.78|-96.80|Texas|1300|131
+Austin|US|30.27|-97.74|Texas|980|149
+Jacksonville|US|30.33|-81.66|Florida|950|5
+Fort Worth|US|32.76|-97.33|Texas|950|196
+San Jose|US|37.34|-121.89|California|1000|26
+Columbus|US|39.96|-83.00|Ohio|910|275
+Charlotte|US|35.23|-80.84|North Carolina|880|229
+Indianapolis|US|39.77|-86.16|Indiana|880|218
+Detroit|US|42.33|-83.05|Michigan|640|183
+Minneapolis|US|44.98|-93.27|Minnesota|430|264
+Las Vegas|US|36.17|-115.14|Nevada|650|610
+Portland (Oregon)|US|45.52|-122.68|Oregon|650|15
+Salt Lake City|US|40.76|-111.89|Utah|210|1288
+Washington, D.C.|US|38.91|-77.04|District of Columbia|690|7
+Baltimore|US|39.29|-76.61|Maryland|585|10
+Nashville|US|36.16|-86.78|Tennessee|690|180
+Memphis|US|35.15|-90.05|Tennessee|630|103
+New Orleans|US|29.95|-90.07|Louisiana|380|2
+Kansas City|US|39.10|-94.58|Missouri|510|277
+St. Louis|US|38.63|-90.20|Missouri|295|142
+Cleveland|US|41.50|-81.69|Ohio|370|199
+Pittsburgh|US|40.44|-79.99|Pennsylvania|300|230
+Cincinnati|US|39.10|-84.51|Ohio|310|147
+Milwaukee|US|43.04|-87.91|Wisconsin|575|188
+Orlando|US|28.54|-81.38|Florida|310|29
+Tampa|US|27.95|-82.46|Florida|385|15
+Raleigh|US|35.78|-78.64|North Carolina|470|96
+Oklahoma City|US|35.47|-97.52|Oklahoma|690|366
+Albuquerque|US|35.08|-106.65|New Mexico|560|1619
+Tucson|US|32.22|-110.97|Arizona|545|728
+Sacramento|US|38.58|-121.49|California|525|9
+Omaha|US|41.26|-95.93|Nebraska|485|332
+Boise|US|43.62|-116.20|Idaho|235|824
+Buffalo|US|42.89|-78.88|New York|278|180
+Richmond (Virginia)|US|37.54|-77.44|Virginia|230|50
+Louisville|US|38.25|-85.76|Kentucky|630|142
+Birmingham (Alabama)|US|33.52|-86.80|Alabama|200|140
+Charleston (South Carolina)|US|32.78|-79.93|South Carolina|150|3
+Savannah|US|32.08|-81.09|Georgia|147|15
+Providence|US|41.82|-71.41|Rhode Island|190|23
+Hartford|US|41.76|-72.68|Connecticut|120|18
+Albany|US|42.65|-73.75|New York|100|9
+Burlington (Vermont)|US|44.48|-73.21|Vermont|45|61
+Portland (Maine)|US|43.66|-70.26|Maine|68|11
+Des Moines|US|41.59|-93.62|Iowa|210|290
+Madison|US|43.07|-89.40|Wisconsin|270|262
+Fargo|US|46.88|-96.79|North Dakota|125|276
+Sioux Falls|US|43.55|-96.73|South Dakota|195|435
+Billings|US|45.78|-108.50|Montana|117|947
+Cheyenne|US|41.14|-104.82|Wyoming|65|1848
+Jackson (Wyoming)|US|43.48|-110.76|Wyoming|11|1900
+Fairbanks|US|64.84|-147.72|Alaska|32|136
+Juneau|US|58.30|-134.42|Alaska|32|17
+Reno|US|39.53|-119.81|Nevada|265|1373
+Santa Fe|US|35.69|-105.94|New Mexico|88|2194
+Flagstaff|US|35.20|-111.65|Arizona|77|2106
+Furnace Creek (Death Valley)|US|36.46|-116.87|California|0.1|-54
+West Yellowstone|US|44.66|-111.10|Montana|1|2030
+Hilo|US|19.72|-155.09|Hawaii|45|11
+Little Rock|US|34.75|-92.29|Arkansas|200|102
+Jackson (Mississippi)|US|32.30|-90.18|Mississippi|150|90
+Colorado Springs|US|38.83|-104.82|Colorado|485|1839
+Aspen|US|39.19|-106.82|Colorado|7|2400
+Duluth|US|46.79|-92.10|Minnesota|87|183
+Calgary|CA|51.05|-114.07|Alberta|1305|1045
+Edmonton|CA|53.55|-113.49|Alberta|1010|645
+Ottawa|CA|45.42|-75.70|Ontario|1015|70
+Winnipeg|CA|49.90|-97.14|Manitoba|750|239
+Mississauga|CA|43.59|-79.64|Ontario|720|156
+Québec City|CA|46.81|-71.21|Quebec|550|98
+Halifax|CA|44.65|-63.57|Nova Scotia|440|20
+Saskatoon|CA|52.13|-106.67|Saskatchewan|275|482
+Regina|CA|50.45|-104.62|Saskatchewan|230|577
+Victoria|CA|48.43|-123.37|British Columbia|92|20
+Hamilton (Ontario)|CA|43.26|-79.87|Ontario|570|90
+London (Ontario)|CA|42.98|-81.25|Ontario|425|251
+Kitchener|CA|43.45|-80.49|Ontario|256|340
+Windsor (Ontario)|CA|42.32|-83.04|Ontario|230|190
+Niagara Falls|CA|43.09|-79.08|Ontario|95|180
+Thunder Bay|CA|48.38|-89.25|Ontario|108|199
+Sudbury|CA|46.49|-81.00|Ontario|162|270
+Kingston|CA|44.23|-76.49|Ontario|132|93
+Fredericton|CA|45.96|-66.64|New Brunswick|60|8
+Moncton|CA|46.09|-64.78|New Brunswick|80|35
+Charlottetown|CA|46.24|-63.13|Prince Edward Island|38|10
+St. John's|CA|47.56|-52.71|Newfoundland and Labrador|110|60
+Whitehorse|CA|60.72|-135.06|Yukon|28|660
+Yellowknife|CA|62.45|-114.37|Northwest Territories|20|200
+Iqaluit|CA|63.75|-68.52|Nunavut|8|34
+Kelowna|CA|49.89|-119.50|British Columbia|145|344
+Whistler|CA|50.12|-122.95|British Columbia|13|675
+Jasper|CA|52.87|-118.08|Alberta|5|1062
+Lethbridge|CA|49.69|-112.84|Alberta|100|920
+Red Deer|CA|52.27|-113.81|Alberta|100|905
+Prince George|CA|53.92|-122.75|British Columbia|77|575
+Churchill|CA|58.77|-94.17|Manitoba|0.9|29
+Inuvik|CA|68.36|-133.72|Northwest Territories|3|15
+Tofino|CA|49.15|-125.90|British Columbia|2|10`;
+/* Region and population for places already in the first list */
+const INFO={Delhi:['Delhi',32000],Mumbai:['Maharashtra',21000],Kolkata:['West Bengal',15000],Chennai:['Tamil Nadu',11500],Hyderabad:['Telangana',10500],Bengaluru:['Karnataka',13000],Ahmedabad:['Gujarat',8400],Pune:['Maharashtra',7200],Jaipur:['Rajasthan',4000],Lucknow:['Uttar Pradesh',3800],Nagpur:['Maharashtra',2800],Surat:['Gujarat',7000],Nashik:['Maharashtra',2000],Kochi:['Kerala',2200],Panaji:['Goa',115],Varanasi:['Uttar Pradesh',1600],Chandigarh:['Chandigarh',1200],Bhopal:['Madhya Pradesh',2300],Indore:['Madhya Pradesh',3300],Vadodara:['Gujarat',2200],Guwahati:['Assam',1100],Thiruvananthapuram:['Kerala',1700],Visakhapatnam:['Andhra Pradesh',2200],Mysuru:['Karnataka',1100],Amritsar:['Punjab',1400],Leh:['Ladakh',45],Shimla:['Himachal Pradesh',210],Lonavala:['Maharashtra',60],Mahabaleshwar:['Maharashtra',15],Ooty:['Tamil Nadu',90],Munnar:['Kerala',70],Manali:['Himachal Pradesh',10],Darjeeling:['West Bengal',120],Rishikesh:['Uttarakhand',100],Hampi:['Karnataka',3],Pushkar:['Rajasthan',22],Alibag:['Maharashtra',20],Kolhapur:['Maharashtra',700],Satara:['Maharashtra',160],
+'New York':['New York',8300],'Los Angeles':['California',3900],Chicago:['Illinois',2700],Houston:['Texas',2300],Miami:['Florida',450],'San Francisco':['California',810],Honolulu:['Hawaii',350],Anchorage:['Alaska',290],Denver:['Colorado',715],Seattle:['Washington',750],Phoenix:['Arizona',1650],Atlanta:['Georgia',500],Boston:['Massachusetts',650],Sedona:['Arizona',10],'Key West':['Florida',26],
+Toronto:['Ontario',2800],Vancouver:['British Columbia',675],'Montréal':['Quebec',1760],'Dawson City':['Yukon',1.5],Banff:['Alberta',8]};
+/* Real time zones (standard time, valid Nov to early Mar). Everywhere else shows local solar time. */
+const TZ_REGION={
+ 'New York':[-5,'ET'],Pennsylvania:[-5,'ET'],Massachusetts:[-5,'ET'],Florida:[-5,'ET'],Georgia:[-5,'ET'],'North Carolina':[-5,'ET'],'South Carolina':[-5,'ET'],Virginia:[-5,'ET'],Maryland:[-5,'ET'],'District of Columbia':[-5,'ET'],Ohio:[-5,'ET'],Michigan:[-5,'ET'],Indiana:[-5,'ET'],Kentucky:[-5,'ET'],Connecticut:[-5,'ET'],'Rhode Island':[-5,'ET'],Vermont:[-5,'ET'],Maine:[-5,'ET'],
+ Illinois:[-6,'CT'],Texas:[-6,'CT'],Missouri:[-6,'CT'],Minnesota:[-6,'CT'],Wisconsin:[-6,'CT'],Louisiana:[-6,'CT'],Alabama:[-6,'CT'],Mississippi:[-6,'CT'],Oklahoma:[-6,'CT'],Iowa:[-6,'CT'],Arkansas:[-6,'CT'],Nebraska:[-6,'CT'],'North Dakota':[-6,'CT'],'South Dakota':[-6,'CT'],Tennessee:[-6,'CT'],
+ Colorado:[-7,'MT'],Utah:[-7,'MT'],'New Mexico':[-7,'MT'],Wyoming:[-7,'MT'],Montana:[-7,'MT'],Idaho:[-7,'MT'],Arizona:[-7,'MST'],
+ California:[-8,'PT'],Washington:[-8,'PT'],Oregon:[-8,'PT'],Nevada:[-8,'PT'],Alaska:[-9,'AKT'],Hawaii:[-10,'HST'],
+ Ontario:[-5,'ET'],Quebec:[-5,'ET'],Nunavut:[-5,'ET'],Manitoba:[-6,'CT'],Saskatchewan:[-6,'CST'],Alberta:[-7,'MT'],'British Columbia':[-8,'PT'],Yukon:[-7,'MST'],'Northwest Territories':[-7,'MT'],
+ 'New Brunswick':[-4,'AT'],'Nova Scotia':[-4,'AT'],'Prince Edward Island':[-4,'AT'],'Newfoundland and Labrador':[-3.5,'NT']
+};
+const TZ_CC={IN:[5.5,'IST'],GB:[0,'GMT'],IE:[0,'GMT'],PT:[0,'WET'],IS:[0,'GMT'],FR:[1,'CET'],DE:[1,'CET'],ES:[1,'CET'],IT:[1,'CET'],NL:[1,'CET'],CH:[1,'CET'],AT:[1,'CET'],CZ:[1,'CET'],PL:[1,'CET'],HU:[1,'CET'],NO:[1,'CET'],SE:[1,'CET'],GR:[2,'EET'],FI:[2,'EET'],UA:[2,'EET'],TR:[3,'TRT'],EG:[2,'EET'],SA:[3,'AST'],IQ:[3,'AST'],IR:[3.5,'IRST'],AE:[4,'GST'],OM:[4,'GST'],QA:[3,'AST'],PK:[5,'PKT'],LK:[5.5,'IST'],NP:[5.75,'NPT'],BD:[6,'BST'],TH:[7,'ICT'],VN:[7,'ICT'],SG:[8,'SGT'],MY:[8,'MYT'],PH:[8,'PHT'],CN:[8,'CST'],HK:[8,'HKT'],TW:[8,'CST'],JP:[9,'JST'],KR:[9,'KST'],NG:[1,'WAT'],KE:[3,'EAT'],ET:[3,'EAT'],ZA:[2,'SAST'],MA:[1,'WET']};
+const POLL2={Ghaziabad:196,Noida:204,Gurugram:188,Faridabad:176,Kanpur:172,Patna:166,Agra:152,Prayagraj:142,Meerut:171,Ludhiana:162,Jalandhar:138,Howrah:150,Asansol:131,Dhanbad:151,Raipur:126,Ranchi:112,Gwalior:132,Jabalpur:106,Jodhpur:101,Kota:98,Ajmer:96,Srinagar:84,Jammu:110,Dehradun:92,Haridwar:104,Patiala:120,Ambala:118,Thane:118,'Navi Mumbai':112,'Pimpri-Chinchwad':104,Aurangabad:92,Solapur:90,Nanded:78,Bhubaneswar:88,Cuttack:92,Gaya:121,Siliguri:99,Durgapur:112,Agartala:70,Imphal:60,Rajkot:102,Gandhinagar:98,Jamnagar:92,Vijayawada:84,Coimbatore:62,Madurai:68,Salem:70,Detroit:62,'Las Vegas':56,Phoenix:70,Sacramento:66,'San Jose':58,Fairbanks:74,'Salt Lake City':72};
+Object.assign(POLL,POLL2);
+
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const RAD=Math.PI/180;
+const regionName=(()=>{try{const d=new Intl.DisplayNames(['en'],{type:'region'});return cc=>d.of(cc)||cc}catch(e){return cc=>cc}})();
+const CITIES=CITY_RAW.trim().split('\n').map((l,i)=>{const [name,cc,lat,lon,tier]=l.split('|');return {id:i,name,cc,country:regionName(cc),lat:+lat,lon:+lon,tier:+tier,key:name,la:+lat*RAD,lo:+lon*RAD}});
+
+/* Append India, USA and Canada places, attach region, population, elevation and time zone */
+CITY_X.trim().split('\n').forEach(l=>{
+  const [name,cc,lat,lon,region,pop,alt]=l.split('|');
+  const p=+pop,lim=cc==='IN'?1000:cc==='US'?900:700;
+  CITIES.push({id:CITIES.length,name,cc,country:regionName(cc),lat:+lat,lon:+lon,tier:p>=lim?3:4,key:name,la:+lat*RAD,lo:+lon*RAD,region,pop:p});
+  ALT[name]=+alt;
+});
+for(const c of CITIES){
+  if(INFO[c.name]){c.region=INFO[c.name][0];c.pop=INFO[c.name][1]}
+  const tz=(c.region&&TZ_REGION[c.region]&&(c.cc==='US'||c.cc==='CA'))?TZ_REGION[c.region]:TZ_CC[c.cc];
+  if(tz){c.tz=tz[0];c.tzName=tz[1]+' · UTC'+(tz[0]<0?'−':'+')+Math.floor(Math.abs(tz[0]))+(Math.abs(tz[0])%1?':'+String(Math.round(Math.abs(tz[0])%1*60)).padStart(2,'0'):'')}
+}
+
+function hash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){let s=seed>>>0;return()=>(s=(Math.imul(s,1664525)+1013904223)>>>0)/4294967296}
+function km(a,b){const s=Math.sin((b.lat-a.lat)*RAD/2)**2+Math.cos(a.lat*RAD)*Math.cos(b.lat*RAD)*Math.sin((b.lon-a.lon)*RAD/2)**2;return 12742*Math.asin(Math.sqrt(s))}
+
+/* Demo weather model: climate by latitude, altitude and season, plus a daily seeded variation.
+   It is not live data. Same place + same day always gives the same numbers. */
+let liveVer=0;
+function weather(p,hrs){
+  hrs=hrs||0;
+  const t0=Date.now()+hrs*36e5, nowD=new Date(t0), bucket=Math.floor(t0/600000);
+  p._wc=p._wc||{};
+  if(p._wc[hrs]&&p._wc[hrs].b===bucket&&p._wc[hrs].v===liveVer)return p._wc[hrs].w;
+  const day=Math.floor(nowD/86400000), r=rng(hash(p.key+'|'+day)), rb=rng(hash(p.key+'|b'+Math.floor(t0/216e5)));
+  const alt=ALT[p.name]||0, dry=DRY.has(p.name);
+  const dec=-15.5*RAD, latR=p.lat*RAD;
+  const d=Math.abs(p.lat+6)*RAD;
+  const Tm=29-38*Math.pow(1-Math.cos(d),0.9)-alt/1000*6.5+(r()-.5)*6;
+  const amp=3.5+r()*2.5+(dry?4:0)+(alt>2000?2:0);
+  const utcH=nowD.getUTCHours()+nowD.getUTCMinutes()/60;
+  const solarOff=p.lon/15,tzv=p.tz!=null?p.tz:solarOff,off=tzv-solarOff;
+  const ls=((utcH+solarOff)%24+24)%24, lt=((utcH+tzv)%24+24)%24;
+  const tAt=h=>Tm+amp*Math.sin(2*Math.PI*(h-9)/24);
+  const hum=clamp(Math.round(62+(20-Math.abs(p.lat))*.5+(r()-.5)*40-(dry?28:0)-amp*1.2),18,97);
+  const cr=rb(), aqiBase=POLL[p.name]!=null?POLL[p.name]:(p.aqiBase!=null?p.aqiBase:16+r()*50);
+  const aqi=Math.round(aqiBase*(.85+rb()*.3));
+  let cond,cloud,pop;
+  if(dry&&cr<.7){cond='Clear';cloud=8;pop=0}
+  else if(cr<.26){cond='Clear';cloud=10;pop=2}
+  else if(cr<.5){cond='Partly cloudy';cloud=40;pop=8}
+  else if(cr<.7){cond='Overcast';cloud=85;pop=20}
+  else if(cr<.88){cond=Tm<1?'Snow':'Light rain';cloud=90;pop=65}
+  else{cond=Tm<1?'Snow':(Tm>18?'Thunderstorm':'Rain');cloud=95;pop=85}
+  if(aqi>170&&cr<.6){cond='Haze';cloud=60;pop=3}
+  else if(hum>88&&cr<.5&&Math.abs(Tm)<14){cond='Fog';cloud=100;pop=10}
+  const wind=Math.round(5+rb()*22+(Math.abs(p.lat)>50?6:0)), dir=Math.round(rb()*359), gust=Math.round(wind*(1.3+rb()*.5));
+  const cosH=-Math.tan(latR)*Math.tan(dec);
+  let sunrise=null,sunset=null,polar=null,frac=null;
+  if(cosH>1)polar='night';else if(cosH<-1)polar='day';else{const H=Math.acos(cosH)/RAD/15,sr=12-H,ss=12+H;sunrise=((sr+off)%24+24)%24;sunset=((ss+off)%24+24)%24;frac=clamp((ls-sr)/(ss-sr),-.08,1.08)}
+  const sinE=h=>Math.sin(latR)*Math.sin(dec)+Math.cos(latR)*Math.cos(dec)*Math.cos((h-12)*15*RAD);
+  const night=sinE(ls)<0;
+  const uvAt=h=>Math.max(0,Math.round(sinE(h)*13*(1-cloud/160)*(1+alt/10000)*10)/10);
+  let vis=10;
+  if(cond==='Fog')vis=.6+r()*.8;else if(cond==='Haze')vis=Math.max(.8,6-aqi/60);else if(/rain|storm/i.test(cond))vis=6;else if(cond==='Snow')vis=3;
+  vis=Math.min(vis,Math.max(.5,12-aqi/22));
+  const temp=tAt(ls), rn=rng(hash(p.key+'h'+day));
+  const hourly=[];for(let i=0;i<24;i++){hourly.push({h:(lt+i)%24,t:tAt(ls+i)+(rn()-.5)*1.2})}
+  hourly[0].t=temp;
+  const daily=[];
+  for(let i=0;i<7;i++){
+    const m=Tm+(r()-.5)*6, c=r(); let dc,dp;
+    if(c<.3){dc='Clear';dp=3}else if(c<.55){dc='Partly cloudy';dp=10}else if(c<.75){dc='Overcast';dp=22}else if(c<.9){dc=m<1?'Snow':'Light rain';dp=60}else{dc=m<1?'Snow':(m>18?'Thunderstorm':'Rain');dp=82}
+    if(i===0){dc=cond==='Haze'||cond==='Fog'?'Partly cloudy':cond;dp=pop}
+    daily.push({d:new Date(nowD.getTime()+i*864e5).toLocaleDateString('en',{weekday:'short'}),cond:dc,pop:dp,hi:m+amp,lo:m-amp});
+  }
+  const w={temp,feels:temp+(temp>24?(hum-50)*.04:0)-(temp<12?wind*.12:0),hi:Tm+amp,lo:Tm-amp,cond,cloud,pop,hum,wind,dir,gust,aqi,
+    pm25:Math.round(aqi*.42),pm10:Math.round(aqi*.42*1.7),o3:Math.round(20+r()*60),no2:Math.round(8+r()*40*Math.min(1.6,aqi/90)),
+    pressure:Math.round(1013+(r()-.5)*26-alt*.11),vis,dew:temp-(100-hum)/5,uv:uvAt(ls),uvMax:uvAt(12),night,lt,tzLabel:p.tz!=null?'local time':'local solar time',frac,sunrise,sunset,polar,hourly,daily,alt};
+  applyLive(p,w,hrs,t0);p._wc[hrs]={b:bucket,v:liveVer,w};return w;
+}
+
+/* Formatting, always from metric base values */
+const U={metric:true};
+const fT=c=>Math.round(U.metric?c:c*9/5+32)+'°';
+const fTn=c=>Math.round(U.metric?c:c*9/5+32);
+const fW=k=>U.metric?Math.round(k)+' km/h':Math.round(k*.621371)+' mph';
+const fV=k=>U.metric?(k>=10?'10+':k.toFixed(1))+' km':(k*.621371>=6?'6+':(k*.621371).toFixed(1))+' mi';
+const fP=h=>U.metric?Math.round(h)+' hPa':(h*.02953).toFixed(2)+' inHg';
+function fClock(hf){if(hf==null)return '–';let h=Math.floor(hf)%24,m=Math.round((hf-Math.floor(hf))*60);if(m===60){m=0;h=(h+1)%24}const ap=h>=12?'PM':'AM';return ((h%12)||12)+':'+String(m).padStart(2,'0')+' '+ap}
+function fHour(h){const x=Math.floor(h)%24;return ((x%12)||12)+(x>=12?'p':'a')}
+function fLL(lat,lon){return Math.abs(lat).toFixed(2)+'°'+(lat>=0?'N':'S')+' '+Math.abs(lon).toFixed(2)+'°'+(lon>=0?'E':'W')}
+const compass=d=>['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];
+
+function aqiCat(v){
+  if(v<=50)return{l:'Good',c:'#3ddc97',tip:'Air is clean. Outdoor activity is fine for everyone.'};
+  if(v<=100)return{l:'Moderate',c:'#ffd84d',tip:'Acceptable. Unusually sensitive people may notice effects.'};
+  if(v<=150)return{l:'Unhealthy for sensitive groups',c:'#ff9f43',tip:'Children, older adults and people with asthma should limit long outdoor effort.'};
+  if(v<=200)return{l:'Unhealthy',c:'#ff5c7a',tip:'Everyone may feel effects. Cut back on outdoor exercise and consider a mask.'};
+  if(v<=300)return{l:'Very unhealthy',c:'#b58cff',tip:'Stay indoors where you can and keep windows closed.'};
+  return{l:'Hazardous',c:'#c0305f',tip:'Health emergency conditions. Avoid going outside.'};
+}
+function uvCat(v){return v<3?'Low':v<6?'Moderate':v<8?'High':v<11?'Very high':'Extreme'}
+
+/* Condition icons, 64x64 viewBox */
+function icon(cond,night){
+  const SUN='#ffb84a',CL='#cfd9f5',CL2='#8b9bc9',BL='#5bb8ff';
+  const cloud=(f,x=0,y=0)=>`<path transform="translate(${x} ${y})" d="M20 46h26a9 9 0 0 0 1.5-17.9A14 14 0 0 0 20.5 24 11 11 0 0 0 20 46z" fill="${f}"/>`;
+  const sun=(cx,cy,r)=>{let s=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${SUN}"/>`;for(let i=0;i<8;i++){const a=i*Math.PI/4,x1=cx+Math.cos(a)*(r+4),y1=cy+Math.sin(a)*(r+4),x2=cx+Math.cos(a)*(r+9),y2=cy+Math.sin(a)*(r+9);s+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${SUN}" stroke-width="3" stroke-linecap="round"/>`}return s};
+  const moon=(x,y,s)=>`<path transform="translate(${x} ${y}) scale(${s})" d="M40 14a18 18 0 1 0 10 28 14 14 0 0 1-10-28z" fill="#e6ecff"/>`;
+  const rain=`<g stroke="${BL}" stroke-width="3" stroke-linecap="round"><line x1="24" y1="50" x2="21" y2="58"/><line x1="33" y1="50" x2="30" y2="58"/><line x1="42" y1="50" x2="39" y2="58"/></g>`;
+  let b='';
+  switch(cond){
+    case 'Clear':b=night?moon(-6,-2,1.15):sun(32,32,10);break;
+    case 'Partly cloudy':b=(night?moon(-14,-12,.8):sun(24,22,8))+cloud(CL,2,2);break;
+    case 'Overcast':b=cloud(CL2,-6,-6)+cloud(CL,2,2);break;
+    case 'Light rain':case 'Rain':b=cloud(CL,0,-4)+rain;break;
+    case 'Thunderstorm':b=cloud(CL2,0,-4)+`<path d="M34 40 26 52h7l-3 10 12-15h-7l3-7z" fill="${SUN}"/>`;break;
+    case 'Snow':b=cloud(CL,0,-4)+`<g fill="#fff"><circle cx="24" cy="54" r="2.6"/><circle cx="33" cy="58" r="2.6"/><circle cx="42" cy="54" r="2.6"/></g>`;break;
+    case 'Haze':b=`<g opacity=".55">${sun(32,26,9)}</g><g stroke="${CL2}" stroke-width="3" stroke-linecap="round"><line x1="12" y1="46" x2="52" y2="46"/><line x1="16" y1="53" x2="48" y2="53"/></g>`;break;
+    case 'Fog':b=cloud(CL2,0,-8)+`<g stroke="${CL}" stroke-width="3" stroke-linecap="round"><line x1="12" y1="46" x2="52" y2="46"/><line x1="18" y1="53" x2="46" y2="53"/></g>`;break;
+    default:b=cloud(CL)
+  }
+  return `<svg viewBox="0 0 64 64" aria-hidden="true">${b}</svg>`;
+}
+
+/* Report categories and icons (24px stroke icons) */
+const CATS=[
+ {id:'weather',l:'Weather',d:'M7 18h9a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z'},
+ {id:'air',l:'Air quality',d:'M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7'},
+ {id:'flood',l:'Flooding',d:'M3 10c2 0 2-2 4.5-2s2.5 2 4.5 2 2.5-2 4.5-2 2.5 2 4.5 2M3 16c2 0 2-2 4.5-2s2.5 2 4.5 2 2.5-2 4.5-2 2.5 2 4.5 2'},
+ {id:'rain',l:'Rain',d:'M7 14h9a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 6 5.5 4.3 4.3 0 0 0 7 14zM8 17l-1 3M12 17l-1 3M16 17l-1 3'},
+ {id:'wind',l:'Wind',d:'M3 9h11a3 3 0 1 0-3-3M3 14h15a3 3 0 1 1-3 3'},
+ {id:'clouds',l:'Clouds',d:'M7 18h9a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z'},
+ {id:'storm',l:'Storm',d:'M7 14h9a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 6 5.5 4.3 4.3 0 0 0 7 14zM12 14l-2 4h3l-2 4'},
+ {id:'heat',l:'Temperature',d:'M10 14.5V5a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z'},
+ {id:'building',l:'Buildings',d:'M5 21V4h9v17M14 9h5v12M3 21h18M8 8h3M8 12h3M8 16h3'},
+ {id:'road',l:'Roads',d:'M8 3 5 21M16 3l3 18M12 4v3M12 11v3M12 18v3'},
+ {id:'water',l:'Water supply',d:'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z'},
+ {id:'waste',l:'Waste',d:'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6'}
+];
+const catById=id=>CATS.find(c=>c.id===id)||CATS[0];
+const catIcon=id=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${catById(id).d}"/></svg>`;
+const SEV=[{l:'Minor',c:'#3ddc97'},{l:'Moderate',c:'#ffd84d'},{l:'Severe',c:'#ff9f43'},{l:'Critical',c:'#ff5c7a'}];
+
+const state={layer:'temp',hrs:0,cmp:[],lon0:60,lat0:18,k:1,kT:1,spin:true,selected:null,hover:null,showReports:true,lastInteract:0,fly:null,vx:0,vy:0,dragging:false};
+const ago=ms=>{const m=Math.round((Date.now()-ms)/60000);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.round(m/60);return h<24?h+' h ago':Math.round(h/24)+' d ago'};
+
+/* Community reports. Shared reports live in the page database when the viewer can use it.
+   Reports posted without it stay in this browser. The first six are labelled examples. */
+const MIN=60000;
+const SEED=[
+ {id:'s1',place:'Delhi',lat:28.61,lon:77.21,cat:'air',sev:3,text:'Thick smog since early morning. Visibility under 200 m on the ring road and eyes burning.',t:Date.now()-38*MIN,n:41,ex:1},
+ {id:'s2',place:'Mumbai',lat:19.08,lon:72.88,cat:'flood',sev:2,text:'Water pooling at the Andheri subway after the evening shower. Cars are taking the flyover instead.',t:Date.now()-95*MIN,n:17,ex:1},
+ {id:'s3',place:'Pune',lat:18.52,lon:73.86,cat:'road',sev:2,text:'Cluster of potholes near the FC Road junction, one lane blocked by repair barriers.',t:Date.now()-3*60*MIN,n:9,ex:1},
+ {id:'s4',place:'London',lat:51.51,lon:-0.13,cat:'building',sev:2,text:'Loose scaffolding sheet flapping above the pavement on a corner building. Wind picking up.',t:Date.now()-5*60*MIN,n:6,ex:1},
+ {id:'s5',place:'Jakarta',lat:-6.21,lon:106.85,cat:'flood',sev:4,text:'Canal overflowing into two streets, residents moving belongings upstairs.',t:Date.now()-26*MIN,n:58,ex:1},
+ {id:'s6',place:'Los Angeles',lat:34.05,lon:-118.24,cat:'air',sev:3,text:'Smoke haze from the hills, ash on parked cars. Sunset is orange-brown.',t:Date.now()-7*60*MIN,n:23,ex:1}
+];
+let LOCAL=[],SHARED=[],REPORTS=SEED.slice();
+const STATUS={},CONF={},confirmed=new Set();
+let UID=null,CAN_EDIT=false,DBH=null;
+try{const raw=localStorage.getItem('atmosphera.reports.v1');if(raw){const m=JSON.parse(raw);if(Array.isArray(m))LOCAL=m}}catch(e){}
+function saveLocal(){try{localStorage.setItem('atmosphera.reports.v1',JSON.stringify(LOCAL))}catch(e){}}
+function rebuildReports(){REPORTS=SHARED.concat(LOCAL,SEED).sort((a,b)=>b.t-a.t)}
+const repCount=r=>r.shared?(CONF[r.id]?CONF[r.id].size:0):(r.n||0)+(confirmed.has(r.id)?1:0);
+const repMine=r=>r.shared?!!(UID&&CONF[r.id]&&CONF[r.id].has(UID)):confirmed.has(r.id);
+function nearbyReports(p){return REPORTS.filter(r=>km(p,r)<(p.tier>=3||p.isPoint?160:220)||r.place===p.name).sort((a,b)=>b.t-a.t)}
+const STAT={open:'Open',seen:'Seen by authority',fixed:'Fixed'};
+
+function hourlySVG(w){
+  const W=372,H=132,pl=10,pr=10,pt=26,pb=24,ts=w.hourly.map(h=>h.t);
+  let mn=Math.min(...ts),mx=Math.max(...ts);if(mx-mn<4){mn-=2;mx+=2}
+  const X=i=>pl+i*(W-pl-pr)/23, Y=t=>pt+(1-(t-mn)/(mx-mn))*(H-pt-pb);
+  const pts=ts.map((t,i)=>[X(i),Y(t)]);
+  let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
+  for(let i=1;i<pts.length;i++){const mx2=(pts[i-1][0]+pts[i][0])/2;d+=` C${mx2.toFixed(1)} ${pts[i-1][1].toFixed(1)} ${mx2.toFixed(1)} ${pts[i][1].toFixed(1)} ${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`}
+  const area=d+` L${X(23)} ${H-pb} L${X(0)} ${H-pb}Z`;
+  const iMax=ts.indexOf(Math.max(...ts)),iMin=ts.indexOf(Math.min(...ts));
+  let lab='';[0,6,12,18,23].forEach(i=>{lab+=`<text x="${X(i)}" y="${H-6}" fill="#7584b0" font-family="IBM Plex Mono,monospace" font-size="11" text-anchor="${i===0?'start':i===23?'end':'middle'}">${i===0?'Now':fHour(w.hourly[i].h)}</text>`});
+  const tag=(i,up)=>`<text x="${X(i)}" y="${Y(ts[i])+(up?-9:17)}" fill="#eaf0ff" font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="${i<3?'start':i>20?'end':'middle'}">${fT(ts[i])}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperature over the next 24 hours, from ${fT(Math.min(...ts))} to ${fT(Math.max(...ts))}">
+  <defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb84a" stop-opacity=".38"/><stop offset="1" stop-color="#ffb84a" stop-opacity="0"/></linearGradient></defs>
+  ${[0,1,2].map(i=>`<line x1="${pl}" x2="${W-pr}" y1="${pt+i*(H-pt-pb)/2}" y2="${pt+i*(H-pt-pb)/2}" stroke="#1e2c52" stroke-width="1"/>`).join('')}
+  <path d="${area}" fill="url(#hg)"/><path d="${d}" fill="none" stroke="#ffb84a" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="${pts[0][0]}" cy="${pts[0][1]}" r="5" fill="#ffb84a" stroke="#0a1226" stroke-width="2.5"/>
+  ${iMax>1?tag(iMax,true):''}${iMin>1&&iMin!==iMax?tag(iMin,true):''}${lab}</svg>`;
+}
+function windSVG(w){
+  const to=(w.dir+180)%360;let ticks='';
+  for(let i=0;i<36;i++){const a=i*10*RAD,l=i%9===0?7:3.5;ticks+=`<line x1="${(42+Math.sin(a)*(38-l)).toFixed(1)}" y1="${(42-Math.cos(a)*(38-l)).toFixed(1)}" x2="${(42+Math.sin(a)*38).toFixed(1)}" y2="${(42-Math.cos(a)*38).toFixed(1)}" stroke="#2a3b69" stroke-width="1.2"/>`}
+  return `<svg viewBox="0 0 84 84" role="img" aria-label="Wind from ${compass(w.dir)}"><circle cx="42" cy="42" r="38" fill="none" stroke="#1e2c52"/>${ticks}
+  <text x="42" y="19" fill="#eaf0ff" font-size="9" font-family="IBM Plex Mono,monospace" text-anchor="middle">N</text>
+  <g transform="rotate(${to} 42 42)"><path d="M42 20 49 46H42.6V62h-1.2V46H35z" fill="#5ee0c4"/></g><circle cx="42" cy="42" r="3" fill="#0a1226" stroke="#5ee0c4" stroke-width="1.5"/></svg>`;
+}
+function sunSVG(w){
+  const W=372,H=96,cx=W/2,cy=84,rx=150,ry=62;
+  const frac=w.frac;
+  const ang=Math.PI*(1-(frac==null?.5:frac)), sx=cx+Math.cos(ang)*rx, sy=cy-Math.sin(ang)*ry;
+  const up=frac!=null&&frac>=0&&frac<=1;
+  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="10" x2="${W-10}" y1="${cy}" y2="${cy}" stroke="#2a3b69"/>
+  <path d="M${cx-rx} ${cy} A${rx} ${ry} 0 0 1 ${cx+rx} ${cy}" fill="none" stroke="#2a3b69" stroke-width="2" stroke-dasharray="3 5"/>
+  ${frac!=null?`<circle cx="${sx.toFixed(1)}" cy="${Math.min(cy,sy).toFixed(1)}" r="8" fill="${up?'#ffb84a':'#5b6a96'}" stroke="#101b38" stroke-width="3"/>`:''}</svg>`;
+}
+const ICO={
+ star:'<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+ cmp:'<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
+ alert:'<path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/>'
+};
+const svgI=(k,fill)=>`<svg viewBox="0 0 24 24" fill="${fill||'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
+
+const fD=k=>U.metric?Math.round(k).toLocaleString('en')+' km':Math.round(k*.621371).toLocaleString('en')+' mi';
+function fPop(k){if(k==null)return null;if(k>=1000)return (k/1000).toFixed(k>=10000?0:1)+' million';if(k>=10)return Math.round(k*1000).toLocaleString('en');return k<1?'Under 1,000':Math.round(k*1000).toLocaleString('en')}
+function aboutHTML(p,w){
+  const near=CITIES.filter(c=>c!==p).map(c=>({c,d:km(p,c)})).sort((a,b)=>a.d-b.d).slice(0,5);
+  const rows=[];
+  if(p.region)rows.push(['State or region',p.region]);
+  rows.push(['Country',p.isPoint?(p.cc?regionName(p.cc):'–'):p.country]);
+  if(p.pop!=null)rows.push(['Population (approx.)',fPop(p.pop)]);
+  if(!p.isPoint&&w.alt!=null)rows.push(['Elevation',U.metric?w.alt+' m':Math.round(w.alt*3.281)+' ft']);
+  rows.push(['Time zone',p.tzName||'Local solar time']);
+  rows.push(['Coordinates',fLL(p.lat,p.lon)]);
+  rows.push(['Daylight today',w.sunrise!=null?((w.sunset-w.sunrise+24)%24).toFixed(1)+' hours':(w.polar==='day'?'24 hours':'0 hours')]);
+  return `<section class="sec"><h3>About ${esc(p.isPoint?'this place':p.name)}</h3>
+  <dl class="about">${rows.map(r=>`<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join('')}</dl></section>
+  <section class="sec"><h3>Nearby places<em>tap to open</em></h3><div class="near">${near.map(n=>{const nw=weather(n.c);return `<button type="button" data-go="${n.c.id}"><span>${esc(n.c.name)}<small>${esc(n.c.region||n.c.country)}</small></span><span class="d">${fD(n.d)}</span><span class="t">${fT(nw.temp)}</span></button>`}).join('')}</div></section>`;
+}
+
+function renderPanel(keep){
+  const p=state.selected,w=weather(p),ac=aqiCat(w.aqi);
+  const rep=nearbyReports(p);
+  const days=w.daily,dmin=Math.min(...days.map(d=>d.lo)),dmax=Math.max(...days.map(d=>d.hi));
+  const sunTxt=w.polar==='night'?'Sun stays below the horizon':w.polar==='day'?'Sun stays up all day':'';
+  const al=alertsFor(p,w,rep),adv=adviceFor(p,w);
+  const saved=isSaved(p),inCmp=state.cmp.includes(placeKey(p));
+  const html=`
+  <div>
+    <p class="eyebrow">${esc(p.isPoint?'Selected point':(p.region?p.region+' · ':'')+p.country)}</p>
+    <h2>${esc(p.name)}</h2>
+    <p class="meta">${esc(p.isPoint?p.country+' · ':'')}${fLL(p.lat,p.lon)}${w.alt?' · '+(U.metric?w.alt+' m':Math.round(w.alt*3.281)+' ft'):''} · ${fClock(w.lt)} ${w.tzLabel}</p>
+    <div class="acts"><button type="button" class="chipbtn" data-act="save" aria-pressed="${saved}">${svgI('star',saved?'currentColor':'none')}${saved?'Saved':'Save place'}</button><button type="button" class="chipbtn" data-act="cmp" aria-pressed="${inCmp}">${svgI('cmp')}${inCmp?'In compare':'Compare'}</button></div>
+  </div>
+  ${al.length?`<div class="alerts">${al.map(a=>`<div class="alert" style="--c:${a.c}" role="alert">${svgI('alert')}<div><b>${esc(a.t)}</b><span>${esc(a.d)}</span></div></div>`).join('')}</div>`:''}
+  <div class="now">
+    <div class="temp">${fTn(w.temp)}<sup>°${U.metric?'C':'F'}</sup></div>
+    <div class="cond">${icon(w.cond,w.night)}<div><b>${w.cond}</b><span>Feels like ${fT(w.feels)}</span></div></div>
+    <div class="hilo"><span>High <b>${fT(w.hi)}</b></span><span>Low <b>${fT(w.lo)}</b></span><span>Rain <b>${w.pop}%</b></span></div>
+  </div>
+  <section class="sec"><h3>What to do today</h3><div class="advice">${adv.map(a=>`<div class="adv"><span class="ai" style="--c:${a.c}">${a.i}</span><div><b>${esc(a.t)}</b><span>${esc(a.d)}</span></div></div>`).join('')}</div></section>
+  <section class="sec hourly"><h3>Next 24 hours<em>temperature</em></h3>${hourlySVG(w)}</section>
+  <section class="sec"><h3>Conditions<em>${w.live?'Live · Open-Meteo · '+new Date(w.liveT).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'Modelled estimate'}</em></h3><div class="grid">
+    <div class="tile wide"><h4>Air quality · US AQI</h4>
+      <div class="aqi-top"><div class="big">${w.aqi}<small>${esc(ac.l)}</small></div><span class="pill" style="--c:${ac.c}">${w.aqi>150?'Avoid exertion':w.aqi>100?'Sensitive groups':w.aqi>50?'Acceptable':'Clean'}</span></div>
+      <div class="aqibar" role="img" aria-label="AQI ${w.aqi} on a 0 to 300 scale"><i style="left:${clamp(w.aqi/300,0,1)*100}%"></i></div>
+      <div class="pol"><div><b>${w.pm25}</b>PM2.5</div><div><b>${w.pm10}</b>PM10</div><div><b>${w.o3}</b>O₃</div><div><b>${w.no2}</b>NO₂</div></div>
+      <div class="sub">${esc(ac.tip)}</div></div>
+    <div class="tile wide"><h4>Wind</h4><div class="wind-row">${windSVG(w)}<div><div class="big">${fW(w.wind).split(' ')[0]}<small>${fW(w.wind).split(' ')[1]}</small></div><div class="sub">From the ${compass(w.dir)} (${w.dir}°)<br>Gusts to ${fW(w.gust)}</div></div></div></div>
+    <div class="tile"><h4>Humidity</h4><div class="big">${w.hum}<small>%</small></div><div class="sub">Dew point ${fT(w.dew)}</div></div>
+    <div class="tile"><h4>UV index</h4><div class="big">${w.uv.toFixed(1)}</div><div class="sub">${uvCat(w.uv)} now · peak ${w.uvMax.toFixed(0)}</div></div>
+    <div class="tile"><h4>Visibility</h4><div class="big">${fV(w.vis).split(' ')[0]}<small>${fV(w.vis).split(' ')[1]}</small></div><div class="sub">${w.vis<2?'Poor':w.vis<6?'Reduced':'Clear'}</div></div>
+    <div class="tile"><h4>Pressure</h4><div class="big">${fP(w.pressure).split(' ')[0]}<small>${fP(w.pressure).split(' ')[1]}</small></div><div class="sub">${w.pressure<1008?'Low, unsettled':w.pressure>1020?'High, settled':'Normal'}</div></div>
+    <div class="tile wide sunarc"><h4>Sun</h4>${sunSVG(w)}<div class="row"><span>${w.sunrise!=null?'Sunrise '+fClock(w.sunrise):sunTxt}</span><span>${w.sunset!=null?'Sunset '+fClock(w.sunset):''}</span></div></div>
+  </div></section>
+  <section class="sec"><h3>7-day outlook</h3><div class="days">${days.map(d=>`<div class="day"><span class="dn">${d.d}</span>${icon(d.cond,false)}<span class="pop">${d.pop}%</span><span class="lo">${fTn(d.lo)}°</span><span class="range"><i style="left:${(d.lo-dmin)/(dmax-dmin)*100}%;right:${100-(d.hi-dmin)/(dmax-dmin)*100}%"></i></span><span class="hi">${fTn(d.hi)}°</span></div>`).join('')}</div></section>
+  ${bestTimeHTML(p)}
+  ${aboutHTML(p,w)}
+  ${quickHTML(p)}
+  <section class="sec"><h3>Community reports<em>${rep.length?rep.length+' nearby':''}</em></h3><div class="reports" id="replist">${
+    rep.length?rep.slice(0,8).map(reportCard).join(''):`<div class="empty">No reports near ${esc(p.name)} yet. If something is wrong here, be the first to flag it.</div>`}
+    <button type="button" class="btn primary" id="panel-report" style="align-self:flex-start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/></svg>Report a problem here</button>
+    <p class="note" id="repnote">${DBH?'Reports are shared with everyone who opens this page.':'Reports you post are saved only in this browser.'} Reports marked Example are placeholders.</p><button type="button" class="linkbtn" id="open-feed">See reports from around the world</button></div></section>
+  ${helplinesHTML(p)}`;
+  const panel=$('#panel'),top=panel.scrollTop;panel.innerHTML=html;panel.scrollTop=keep?top:0;
+  renderChip();
+}
+function reportCard(r){
+  const s=SEV[r.sev-1],c=catById(r.cat),mine=repMine(r),st=STATUS[r.id]||'open',n=repCount(r);
+  const stat=r.ex?'':(CAN_EDIT&&r.shared?`<select class="stsel" data-status="${r.id}" aria-label="Report status">${Object.keys(STAT).map(k=>`<option value="${k}"${k===st?' selected':''}>${STAT[k]}</option>`).join('')}</select>`:`<span class="stat s-${st}">${STAT[st]}</span>`);
+  return `<article class="rep"><div class="rep-h"><span class="cat">${catIcon(r.cat)}${c.l}</span><span class="sev" style="--c:${s.c}">${s.l}</span>${r.ex?'<span class="tag">Example</span>':''}${stat}</div>
+  <p>${esc(r.text)}</p>${r.photo?`<img src="${r.photo}" alt="Photo attached to the report">`:''}
+  <div class="rep-f"><span>${esc(r.place)} · ${ago(r.t)}</span><span class="rep-btns"><button type="button" data-same="${r.id}" aria-pressed="${mine}">${mine?'Confirmed':'Same here'} · ${n}</button><button type="button" data-copy="${r.id}">Copy for authority</button>${CAN_EDIT&&r.shared?`<button type="button" data-del="${r.id}" aria-label="Delete report">Delete</button>`:''}</span></div></article>`;
+}
+function renderChip(){
+  const p=state.selected,w=weather(p);
+  $('#chip').innerHTML=`${icon(w.cond,w.night)}<div style="min-width:0"><b>${esc(p.name)}</b><span>${w.cond} · AQI ${w.aqi} · ${fW(w.wind)}</span></div><span class="t">${fT(w.temp)}</span>`;
+}
+
+/* Advice, alerts, best time to visit, saved places, compare, time slider, shared reports, share links */
+const AI={
+ umbrella:'<path d="M12 3a9 9 0 0 0-9 9h18a9 9 0 0 0-9-9zM12 12v6a2 2 0 0 0 4 0"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ mask:'<path d="M4 10c0-2 2-3 8-3s8 1 8 3v3c0 3-3 5-8 5s-8-2-8-5zM8 12h8"/>',
+ therm:'<path d="M10 14.5V5a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z"/>',
+ wind:'<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/>',
+ run:'<circle cx="14" cy="4.5" r="1.8"/><path d="m9 21 3-6-2.5-3 3-3.5 3 3 3 1M5.5 12.5 9 9"/>',
+ car:'<path d="M5 16V11l2-5h10l2 5v5M3 16h18M7 19v-3M17 19v-3"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/>',
+ ok:'<path d="m5 12 4.5 4.5L19 7"/>',
+ drop:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'
+};
+const aiSvg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${AI[k]}</svg>`;
+const hr12=h=>{const x=Math.round(h)%24;return ((x%12)||12)+(x>=12?' PM':' AM')};
+
+function adviceFor(p,w){
+  const out=[],add=(k,c,t,d)=>out.push({i:aiSvg(k),c,t,d});
+  if(/storm/i.test(w.cond))add('umbrella','#ff9f43','Stay off open ground','Thunderstorm in the area. Avoid trees, water and hilltops until it passes.');
+  else if(w.pop>=50)add('umbrella','#5bb8ff','Carry an umbrella',w.pop+'% chance of rain today.');
+  if(w.aqi>150)add('mask','#ff5c7a','Wear a mask outdoors','AQI is '+w.aqi+'. Cut back on outdoor exercise and keep windows closed.');
+  else if(w.aqi>100)add('mask','#ff9f43','Sensitive people: take care','AQI is '+w.aqi+'. Children, older adults and people with asthma should limit long time outside.');
+  if(w.uvMax>=6)add('sun','#ffb84a','Use sunscreen and a hat','UV peaks at '+w.uvMax.toFixed(0)+' around midday. Stay in shade from late morning to mid-afternoon.');
+  else if(w.uvMax>=3&&out.length<3)add('sun','#ffb84a','Sunscreen if out for long','UV peaks at '+w.uvMax.toFixed(0)+' today.');
+  if(w.hi>=35||w.feels>=38)add('drop','#ff9f43','Drink water, avoid midday heat','High near '+fT(w.hi)+'. Keep outdoor work for early morning or evening.');
+  else if(w.lo<=5||w.feels<=3)add('therm','#5bb8ff','Dress in layers','Feels like '+fT(w.feels)+' now and drops to '+fT(w.lo)+'.');
+  if(w.temp<=0&&w.pop>=30)add('therm','#8fb2ff','Watch for ice','Freezing temperatures with moisture. Roads and steps may be slippery.');
+  if(w.gust>=45)add('wind','#5ee0c4','Gusty wind','Gusts to '+fW(w.gust)+'. Secure loose items and take care on two wheels.');
+  if(w.vis<2)add('car','#cfd9f5','Drive slowly','Visibility is about '+fV(w.vis)+'. Use low beams and leave extra distance.');
+  if(w.aqi<=150&&w.pop<60&&out.length<4){
+    let best=null;
+    w.hourly.forEach((h,i)=>{const day=w.sunrise==null?w.polar==='day':(h.h>=w.sunrise&&h.h<=w.sunset-.5);if(!day)return;const s=Math.abs(h.t-20)+(i>12?.5:0);if(!best||s<best.s)best={s,h:h.h}});
+    if(best)add('run','#3ddc97','Best time outside',hr12(best.h)+' to '+hr12(best.h+2)+' looks most comfortable ('+fT(w.hourly.find(x=>x.h===best.h).t)+').');
+  }
+  if(out.length<2)add('ok','#3ddc97','Easy conditions','Nothing special to plan for around '+p.name+' today.');
+  return out.slice(0,4);
+}
+function alertsFor(p,w,rep){
+  const a=[];
+  if(w.aqi>=200)a.push({c:'#ff5c7a',t:'Very unhealthy air',d:'AQI '+w.aqi+'. Everyone should limit time outdoors.'});
+  else if(w.aqi>=150)a.push({c:'#ff9f43',t:'Unhealthy air quality',d:'AQI '+w.aqi+'. Sensitive groups should stay indoors.'});
+  if(w.temp>=38||w.feels>=40)a.push({c:'#ff5c7a',t:'Heat warning',d:'Feels like '+fT(w.feels)+'. Avoid strenuous outdoor activity.'});
+  if(w.temp<=-15)a.push({c:'#8fb2ff',t:'Extreme cold',d:'Frostbite risk on exposed skin within minutes.'});
+  if(/storm/i.test(w.cond))a.push({c:'#ff9f43',t:'Thunderstorm',d:'Lightning and heavy rain in the area.'});
+  if(w.gust>=60)a.push({c:'#ff9f43',t:'Strong wind',d:'Gusts to '+fW(w.gust)+'.'});
+  if(w.cond==='Fog'&&w.vis<1)a.push({c:'#cfd9f5',t:'Dense fog',d:'Visibility under '+fV(1)+'.'});
+  const crit=rep.filter(r=>!r.ex&&r.sev>=3&&Date.now()-r.t<864e5);
+  if(crit.length)a.push({c:'#ff5c7a',t:crit.length+' serious report'+(crit.length>1?'s':'')+' nearby',d:'People reported severe problems in the last 24 hours. See community reports below.'});
+  return a.slice(0,3);
+}
+
+/* Best time to visit, modelled from latitude, altitude and seasonal rain patterns */
+const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function monthly(p){
+  const alt=ALT[p.name]||0,dry=DRY.has(p.name),aqb=POLL[p.name]!=null?POLL[p.name]:30;
+  const monsoon=p.lat>5&&p.lat<32&&p.lon>65&&p.lon<100;
+  const out=[];
+  for(let m=0;m<12;m++){
+    const doy=m*30.4+15,dec=-23.44*Math.cos(2*Math.PI*(doy+10)/365),sh=dec*.39;
+    const d=Math.abs(p.lat-sh)*RAD;
+    let t=29-38*Math.pow(1-Math.cos(d),.9)-alt/1000*6.5;
+    if(monsoon&&(m===3||m===4||m===5))t+=3;
+    if(monsoon&&m>=6&&m<=8)t-=1.5;
+    let pop;
+    if(dry)pop=6;
+    else if(monsoon)pop=m>=5&&m<=8?78:m===9?35:m===3||m===4?14:5;
+    else if(Math.abs(p.lat)<15){const wet=p.lat>=0?(m>=4&&m<=9):(m>=10||m<=3);pop=wet?58:20}
+    else pop=30+(hash(p.key+m)%12)-4;
+    let aqi=aqb;
+    if(aqb>=90&&p.lat>15&&p.lat<42&&(m>=10||m<=1))aqi=aqb*1.35;
+    if(monsoon&&m>=6&&m<=8)aqi=aqb*.55;
+    const ts=Math.max(0,100-Math.abs(t-22)*5),rs=100-pop,as=Math.max(0,100-aqi/3);
+    out.push({m,t,pop,aqi,score:Math.round(.5*ts+.25*rs+.25*as)});
+  }
+  return out;
+}
+function bestMonths(p){const ms=monthly(p),mx=Math.max(...ms.map(x=>x.score));return ms.filter(x=>x.score>=mx-7).sort((a,b)=>b.score-a.score).slice(0,5).sort((a,b)=>a.m-b.m).map(x=>MN[x.m])}
+function bestTimeHTML(p){
+  const ms=monthly(p),W=372,H=118,bw=22,gap=(W-12*bw)/11,top=8,base=84;
+  let bars='';
+  ms.forEach((x,i)=>{
+    const h=Math.max(4,(base-top)*x.score/100),xx=i*(bw+gap),col=x.score>=70?'#3ddc97':x.score>=55?'#ffd84d':x.score>=40?'#ff9f43':'#ff5c7a';
+    bars+=`<g><title>${MN[x.m]}: comfort ${x.score}/100, about ${fT(x.t)}, ${Math.round(x.pop)}% rain days, AQI ${Math.round(x.aqi)}</title><rect x="${xx.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${bw}" height="${h.toFixed(1)}" rx="5" fill="${col}" opacity="${x.m===new Date().getMonth()?1:.78}"/>
+    <text x="${(xx+bw/2).toFixed(1)}" y="${base+14}" fill="${x.m===new Date().getMonth()?'#ffb84a':'#7584b0'}" font-family="IBM Plex Mono,monospace" font-size="10.5" text-anchor="middle">${MN[x.m][0]}</text>
+    <text x="${(xx+bw/2).toFixed(1)}" y="${base+28}" fill="#a3b1d6" font-family="IBM Plex Mono,monospace" font-size="10" text-anchor="middle">${fTn(x.t)}°</text></g>`;
+  });
+  const best=bestMonths(p);
+  return `<section class="sec"><h3>Best time to visit<em>comfort by month</em></h3>
+  <svg viewBox="0 0 ${W} ${H+14}" style="display:block;width:100%;height:auto" role="img" aria-label="Comfort score by month. Best months: ${best.join(', ')}">${bars}</svg>
+  <p class="sub" style="margin-top:8px"><b style="color:var(--ink)">Best months: ${best.join(', ')}.</b> Scored from temperature, rain and air quality. Modelled from seasonal patterns, not historical records.</p></section>`;
+}
+
+/* Saved places and compare list (kept in this browser) */
+const placeKey=p=>p.isPoint?'pt:'+p.lat.toFixed(2)+','+p.lon.toFixed(2):'c:'+p.name;
+function resolveKey(k){if(k.startsWith('c:'))return CITIES.find(c=>c.name===k.slice(2));const[la,lo]=k.slice(3).split(',').map(Number);return pointPlace([lo,la])}
+let SAVED=[];
+try{const s=JSON.parse(localStorage.getItem('atmosphera.saved.v1')||'[]');if(Array.isArray(s))SAVED=s.filter(x=>typeof x==='string')}catch(e){}
+const saveSaved=()=>{try{localStorage.setItem('atmosphera.saved.v1',JSON.stringify(SAVED))}catch(e){}};
+const isSaved=p=>SAVED.includes(placeKey(p));
+function toggleSaved(p){const k=placeKey(p),i=SAVED.indexOf(k);if(i>=0)SAVED.splice(i,1);else SAVED.unshift(k);saveSaved();renderSaved();renderPanel(true)}
+function toggleCmp(p){const k=placeKey(p),i=state.cmp.indexOf(k);if(i>=0)state.cmp.splice(i,1);else{state.cmp.push(k);if(state.cmp.length>3)state.cmp.shift()}renderCmpBtn();renderPanel(true)}
+function renderCmpBtn(){const b=$('#open-cmp');b.hidden=state.cmp.length===0;b.querySelector('span').textContent='Compare ('+state.cmp.length+')'}
+function renderSaved(){
+  $('#saved-n').textContent=SAVED.length;
+  const box=$('#saved-list');
+  if(!SAVED.length){box.innerHTML='<p class="empty" style="margin:0">No saved places yet. Open a place and tap Save place to keep it here.</p>';return}
+  box.innerHTML=SAVED.map(k=>{const p=resolveKey(k);if(!p)return '';const w=weather(p),ac=aqiCat(w.aqi);return `<div class="srow"><button type="button" data-open="${esc(k)}"><span>${esc(p.name)}<small>${esc(p.region||p.country)}</small></span><span class="aq" style="--c:${ac.c}">AQI ${w.aqi}</span><span class="t">${fT(w.temp)}</span></button><button type="button" class="x" data-rm="${esc(k)}" aria-label="Remove ${esc(p.name)} from saved">×</button></div>`}).join('');
+}
+function cmpHTML(){
+  const ps=state.cmp.map(resolveKey).filter(Boolean),ws=ps.map(p=>weather(p));
+  if(ps.length<2)return '<p class="empty">Add at least two places with the Compare button in the weather panel. You have '+ps.length+' so far.</p>';
+  const rows=[
+    ['Temperature',(w)=>fT(w.temp),w=>Math.abs(w.temp-22),'low'],
+    ['Feels like',w=>fT(w.feels),w=>Math.abs(w.feels-22),'low'],
+    ['Conditions',w=>w.cond,null],
+    ['Air quality (AQI)',w=>w.aqi+' · '+aqiCat(w.aqi).l,w=>w.aqi,'low'],
+    ['Wind',w=>fW(w.wind),w=>w.wind,'low'],
+    ['Chance of rain',w=>w.pop+'%',w=>w.pop,'low'],
+    ['Humidity',w=>w.hum+'%',w=>Math.abs(w.hum-50),'low'],
+    ['UV index now',w=>w.uv.toFixed(1),w=>w.uv,'low'],
+    ['Visibility',w=>fV(w.vis),w=>-w.vis,'low'],
+    ['Best months',(w,p)=>bestMonths(p).join(', '),null]
+  ];
+  let h='<div class="cmpwrap"><table class="cmp"><thead><tr><th></th>'+ps.map(p=>`<th scope="col"><b>${esc(p.name)}</b><small>${esc(p.region||p.country)}</small><button type="button" data-cmp-rm="${esc(placeKey(p))}">Remove</button></th>`).join('')+'</tr></thead><tbody>';
+  for(const r of rows){
+    let best=-1;if(r[2]){const v=ws.map(w=>r[2](w));best=v.indexOf(Math.min(...v));if(v.every(x=>x===v[0]))best=-1}
+    h+=`<tr><th scope="row">${r[0]}</th>`+ws.map((w,i)=>`<td${i===best?' class="best"':''}>${esc(r[1](w,ps[i]))}</td>`).join('')+'</tr>';
+  }
+  return h+'</tbody></table></div><p class="note" style="margin-top:12px">Highlighted cells are the most comfortable or safest value in each row. Uses live data where available.</p>';
+}
+
+/* Time slider for the globe layers */
+const hr=$('#hrs'),hl=$('#hrs-l');let hrTimer=null;
+function updHrs(){state.hrs=+hr.value;hl.textContent=state.hrs?'+'+state.hrs+' h · '+new Date(Date.now()+state.hrs*36e5).toLocaleString('en',{weekday:'short',hour:'numeric'}):'Now'}
+hr.addEventListener('input',updHrs);
+$('#hrs-now').onclick=()=>{hr.value=0;updHrs()};
+$('#hrs-play').onclick=e=>{
+  const b=e.currentTarget;if(hrTimer){clearInterval(hrTimer);hrTimer=null;b.setAttribute('aria-pressed','false');return}
+  b.setAttribute('aria-pressed','true');hrTimer=setInterval(()=>{hr.value=(+hr.value+3)>48?0:+hr.value+3;updHrs()},800);
+};
+
+/* Share links: the page address follows the selected city */
+const slug=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+let hashLock=false;
+function setHash(p){if(p.isPoint)return;hashLock=true;try{location.hash=slug(p.name)}catch(e){}setTimeout(()=>{hashLock=false},50)}
+function fromHash(){const h=(location.hash||'').slice(1);if(!h)return false;const c=CITIES.find(c=>slug(c.name)===h);if(c){select(c);return true}return false}
+window.addEventListener('hashchange',()=>{if(!hashLock)fromHash()});
+
+/* Contacts for the report form and "Copy for authority" */
+function reportText(r){const c=catById(r.cat),s=SEV[r.sev-1];return 'Problem report (via Atmosphera)\nType: '+c.l+', '+s.l+'\nPlace: '+r.place+' ('+fLL(r.lat,r.lon)+')\nReported: '+new Date(r.t).toLocaleString('en',{dateStyle:'medium',timeStyle:'short'})+'\nDetails: '+r.text}
+
+/* Shared reports through the page database, when the viewer can use it */
+let CAN_WRITE=true;
+async function initShared(){
+  if(!window.claude||!window.claude.use)return;
+  let db=null,user=null;
+  try{db=await window.claude.use('db');user=await window.claude.use('user')}catch(e){}
+  if(!db)return;
+  DBH=db;
+  try{if(user){UID=await user.id();CAN_EDIT=!!user.canEdit();CAN_WRITE=user.can('data.write')!==false}}catch(e){}
+  const fail=()=>{};
+  db.collection('reports').orderBy('t','desc').limit(300).onSnapshot(s=>{SHARED=s.docs.map(d=>Object.assign({id:d.id,shared:true},d.data()));rebuildReports();renderPanel(true)},fail);
+  db.collection('status').onSnapshot(s=>{for(const k in STATUS)delete STATUS[k];s.docs.forEach(d=>{STATUS[d.id]=(d.data()||{}).status||'open'});renderPanel(true)},fail);
+  db.collection('confirms').onSnapshot(s=>{for(const k in CONF)delete CONF[k];s.docs.forEach(d=>{const x=d.data()||{};if(!x.rid)return;(CONF[x.rid]=CONF[x.rid]||new Set()).add(x.uid)});renderPanel(true)},fail);
+}
+
+/* National emergency numbers: ambulance/medical | fire | police | other lines (Label=number;...)
+   Only numbers that are well established are listed. Countries not listed fall back to a generic note. */
+const HL_RAW=`IN:108|101|100|Unified emergency=112;Disaster (NDMA)=1078;Women helpline=1091;Child helpline=1098
+US:911|911|911|Poison control=1-800-222-1222;Suicide and crisis lifeline=988
+CA:911|911|911|Poison centre (most provinces)=1-844-764-7669
+GB:999|999|999|NHS non-urgent=111;Also works=112
+IE:112|112|112|Also works=999
+AU:000|000|000|Mobile alternative=112;Storm and flood help (SES)=132 500
+NZ:111|111|111|Healthline=0800 611 116
+DE:112|112|110|
+FR:15|18|17|Any emergency (EU)=112
+ES:112|112|112|
+IT:118|115|113|Carabinieri=112
+NL:112|112|112|
+AT:144|122|133|Any emergency (EU)=112
+CH:144|118|117|Any emergency=112
+CZ:155|150|158|Any emergency (EU)=112
+HU:104|105|107|Any emergency (EU)=112
+PL:999|998|997|Any emergency (EU)=112
+PT:112|112|112|
+GR:166|199|100|Any emergency (EU)=112
+SE:112|112|112|
+NO:113|110|112|
+FI:112|112|112|
+IS:112|112|112|
+FO:112|112|112|
+GL:112|112|112|
+SJ:113|110|112|
+RU:103|101|102|Any emergency=112
+UA:103|101|102|Any emergency=112
+TR:112|112|112|
+KZ:103|101|102|Any emergency=112
+UZ:103|101|102|
+MN:103|101|102|
+CN:120|119|110|Traffic police=122
+HK:999|999|999|
+TW:119|119|110|
+JP:119|119|110|Coast guard=118
+KR:119|119|112|Coast guard=122
+SG:995|995|999|Non-emergency ambulance=1777
+MY:999|994|999|Any emergency (mobile)=112
+TH:1669|199|191|Tourist police=1155
+VN:115|114|113|
+ID:119|113|110|Search and rescue=115
+PH:911|911|911|
+PK:115|16|15|Rescue (Punjab)=1122
+BD:999|999|999|
+LK:1990|110|119|Disaster management=117
+NP:102|101|100|
+AE:998|997|999|
+SA:997|998|999|Any emergency=112
+QA:999|999|999|
+OM:9999|9999|9999|
+JO:193|199|191|
+IL:101|102|100|
+LB:140|175|112|Civil defence=125
+IR:115|125|110|
+EG:123|180|122|Tourist police=126
+MA:15|15|19|
+DZ:14|14|17|
+TN:190|198|197|
+NG:112|112|112|Alternative=199
+GH:193|192|191|Any emergency=112
+KE:999|999|999|Any emergency=112
+ET:907|939|991|
+UG:999|999|999|Any emergency=112
+TZ:112|112|112|
+ZA:10177|10177|10111|Any mobile emergency=112
+AO:112|112|113|
+BR:192|193|190|Civil defence=199
+AR:107|100|101|Any emergency=911
+CL:131|132|133|
+CO:123|123|123|
+PE:106|116|105|
+EC:911|911|911|
+UY:911|911|911|
+VE:911|911|911|
+BO:118|119|110|
+PY:911|911|911|
+MX:911|911|911|
+PA:911|911|911|
+CU:104|105|106|`;
+const HL={};HL_RAW.trim().split('\n').forEach(l=>{const i=l.indexOf(':'),cc=l.slice(0,i),[a,f,p,x]=l.slice(i+1).split('|');HL[cc]={amb:a,fire:f,pol:p,more:(x||'').split(';').filter(Boolean).map(s=>s.split('='))}});
+const helpFor=cc=>{const h=HL[cc];return h?`Ambulance and hospitals ${h.amb}, fire ${h.fire}, police ${h.pol}.`:'In an emergency call your local emergency number. 112 works on most mobile phones worldwide.'};
+const mapQ=(q,p)=>`https://www.google.com/maps/search/${q}/@${p.lat.toFixed(4)},${p.lon.toFixed(4)},14z`;
+const tel=n=>`<a href="tel:${n.replace(/[^\d+]/g,'')}">${esc(n)}</a>`;
+function helplinesHTML(p){
+  const h=HL[p.cc];
+  const rows=h?[['Ambulance and hospitals',h.amb],['Fire brigade',h.fire],['Police',h.pol]].concat(h.more):[];
+  const links=[['hospital','Hospitals'],['fire+station','Fire stations'],['police+station','Police stations'],['pharmacy','Pharmacies']].map(([q,l])=>`<a class="chipbtn" href="${mapQ(q,p)}" target="_blank" rel="noopener noreferrer">${l} near here</a>`).join('');
+  return `<section class="sec" id="helpsec"><h3>Emergency helplines<em>${esc(p.country)}</em></h3>
+  ${h?`<div class="hl">${rows.map(r=>`<div><span>${esc(r[0])}</span><b>${tel(r[1])}</b></div>`).join('')}</div>`:`<p class="note">We do not have verified numbers for ${esc(p.country)} yet. Call your local emergency number. 112 works on most mobile phones worldwide.</p>`}
+  <div class="acts" style="margin-top:10px">${links}</div>
+  <p class="note" style="margin-top:10px">Numbers are national emergency lines. Individual hospitals and stations are found on the map links, so check the number there before relying on it. <button type="button" class="linkbtn" id="open-help">Helplines for every country</button></p></section>`;
+}
+function helpListHTML(q){
+  q=(q||'').trim().toLowerCase();
+  const list=Object.keys(HL).map(cc=>({cc,n:regionName(cc)})).filter(x=>!q||x.n.toLowerCase().includes(q)||x.cc.toLowerCase()===q).sort((a,b)=>a.n.localeCompare(b.n));
+  if(!list.length)return '<p class="note">No country matches that search.</p>';
+  return `<table class="cmp hltab"><thead><tr><th>Country</th><th>Ambulance</th><th>Fire</th><th>Police</th></tr></thead><tbody>${list.map(x=>{const h=HL[x.cc];return `<tr><th scope="row">${esc(x.n)}</th><td>${tel(h.amb)}</td><td>${tel(h.fire)}</td><td>${tel(h.pol)}</td></tr>`}).join('')}</tbody></table>`;
+}
+/* Quick one-tap reports and the worldwide feed */
+const QUICK=[{l:'Too hot',cat:'heat',sev:2},{l:'Too cold',cat:'heat',sev:2},{l:'Smoky or bad air',cat:'air',sev:3},{l:'Strong wind',cat:'wind',sev:2},{l:'Heavy rain',cat:'rain',sev:2},{l:'Thick cloud, dark',cat:'clouds',sev:1},{l:'Storm or lightning',cat:'storm',sev:3},{l:'All fine here',cat:'weather',sev:1}];
+function quickHTML(p){return `<section class="sec"><h3>How is it where you are?<em>one tap</em></h3><div class="quick">${QUICK.map((q,i)=>`<button type="button" data-quick="${i}">${esc(q.l)}</button>`).join('')}</div><p class="note" style="margin-top:8px">Adds a short report for ${esc(p.name)}. Use "Report a problem" below to add details or a photo.</p></section>`}
+function feedHTML(cat){
+  const rs=REPORTS.filter(r=>!r.ex&&(!cat||r.cat===cat)).slice(0,60);
+  if(!rs.length)return '<p class="note">No live reports yet. Reports posted by people around the world appear here, newest first.</p>';
+  return rs.map(r=>{const c=catById(r.cat),s=SEV[r.sev-1];return `<button type="button" class="feedrow" data-feed="${r.id}"><span class="cat">${catIcon(r.cat)}${c.l}</span><span class="sev" style="--c:${s.c}">${s.l}</span><span class="ft">${esc(r.text)}</span><small>${esc(r.place)} · ${ago(r.t)}</small></button>`}).join('');
+}
+
+/* Live data from Open-Meteo (forecast + air quality). Falls back to the built-in model when a request fails. */
+const LIVE=new Map(),LIVE_TTL=20*60000,LS={ok:null,loading:0,t:0};
+const WMO=c=>c===0||c===1?'Clear':c===2?'Partly cloudy':c===3?'Overcast':(c===45||c===48)?'Fog':((c>=51&&c<=57)||c===61||c===80)?'Light rain':(c===63||c===65||c===66||c===67||c===81||c===82)?'Rain':((c>=71&&c<=77)||c===85||c===86)?'Snow':c>=95?'Thunderstorm':'Partly cloudy';
+const FC_CUR='temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,dew_point_2m';
+const FC_HR='temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,cloud_cover,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,uv_index,dew_point_2m';
+const FC_DAY='weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max';
+const AQ_V='us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide';
+async function getJSON(url){
+  const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),15000);
+  try{const r=await fetch(url,{signal:ac.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(tm)}
+}
+const asArr=j=>Array.isArray(j)?j:[j];
+async function loadLive(places){
+  const todo=[],seen=new Set();
+  for(const p of places){if(seen.has(p.key))continue;seen.add(p.key);const L=LIVE.get(p.key);if(L&&Date.now()-L.t<LIVE_TTL)continue;if(L&&L.pend)continue;todo.push(p)}
+  if(!todo.length)return;
+  for(let i=0;i<todo.length;i+=40){
+    const grp=todo.slice(i,i+40);grp.forEach(p=>LIVE.set(p.key,Object.assign(LIVE.get(p.key)||{},{pend:1})));
+    const la=grp.map(p=>p.lat.toFixed(3)).join(','),lo=grp.map(p=>p.lon.toFixed(3)).join(',');
+    const base=`latitude=${la}&longitude=${lo}&timezone=auto&timeformat=unixtime`;
+    LS.loading++;renderLiveBadge();
+    try{
+      const [fc,aq]=await Promise.all([
+        getJSON(`https://api.open-meteo.com/v1/forecast?${base}&current=${FC_CUR}&hourly=${FC_HR}&daily=${FC_DAY}&forecast_days=7&forecast_hours=72`),
+        getJSON(`https://air-quality-api.open-meteo.com/v1/air-quality?${base}&current=${AQ_V}&hourly=${AQ_V}&forecast_hours=72`).catch(()=>null)
+      ]);
+      const F=asArr(fc),A=aq?asArr(aq):[];
+      grp.forEach((p,k)=>{const f=F[k];if(!f||!f.hourly||!f.hourly.time){LIVE.delete(p.key);return}
+        const a=A[k];LIVE.set(p.key,{t:Date.now(),off:f.utc_offset_seconds||0,tzn:f.timezone_abbreviation,c:f.current||null,h:f.hourly,d:f.daily||null,a:a&&a.hourly&&a.hourly.time?{c:a.current||null,h:a.hourly}:null})});
+      LS.ok=true;LS.t=Date.now();
+    }catch(e){grp.forEach(p=>LIVE.delete(p.key));if(LS.ok!==true)LS.ok=false}
+    LS.loading--;liveVer++;renderLiveBadge();
+    if(typeof liveChanged==='function')liveChanged();
+  }
+}
+function applyLive(p,w,hrs,t0){
+  const L=LIVE.get(p.key);if(!L||!L.h||Date.now()-L.t>90*60000)return w;
+  const ts=Math.floor(t0/1000),H=L.h,n=H.time.length,i=clamp(Math.floor((ts-H.time[0])/3600),0,n-1),now0=hrs===0&&L.c;
+  const g=k=>{const v=now0&&L.c[k]!=null?L.c[k]:(H[k]?H[k][i]:null);return v==null?null:v};
+  const set=(key,v,f)=>{if(v!=null&&!Number.isNaN(v))w[key]=f?f(v):v};
+  set('temp',g('temperature_2m'));set('feels',g('apparent_temperature'));set('hum',g('relative_humidity_2m'),Math.round);
+  set('cloud',g('cloud_cover'),Math.round);set('wind',g('wind_speed_10m'),Math.round);set('dir',g('wind_direction_10m'),Math.round);set('gust',g('wind_gusts_10m'),Math.round);
+  set('dew',g('dew_point_2m'));set('cond',g('weather_code'),WMO);set('uv',g('uv_index'));
+  if(now0&&L.c.pressure_msl!=null)w.pressure=Math.round(L.c.pressure_msl);
+  const pp=H.precipitation_probability?H.precipitation_probability[i]:null;if(pp!=null)w.pop=pp;
+  if(H.visibility&&H.visibility[i]!=null)w.vis=Math.max(.05,H.visibility[i]/1000);
+  const dayf=g('is_day');if(dayf!=null)w.night=!dayf;
+  const off=L.off;w.lt=(((ts+off)/3600)%24+24)%24;w.tzLabel='local time';
+  const D=L.d;
+  if(D&&D.time){
+    const j=clamp(Math.floor((ts-D.time[0])/86400),0,D.time.length-1);
+    set('hi',D.temperature_2m_max[j]);set('lo',D.temperature_2m_min[j]);set('uvMax',D.uv_index_max[j]);
+    const sr=D.sunrise[j],ss=D.sunset[j];
+    if(sr&&ss){w.polar=null;w.sunrise=(((sr+off)/3600)%24+24)%24;w.sunset=(((ss+off)/3600)%24+24)%24;w.frac=clamp((ts-sr)/(ss-sr),-.08,1.08)}
+    w.daily=D.time.map((t,k)=>({d:new Date((t+off)*1000).toLocaleDateString('en',{weekday:'short',timeZone:'UTC'}),cond:WMO(D.weather_code[k]),pop:D.precipitation_probability_max[k]!=null?D.precipitation_probability_max[k]:0,hi:D.temperature_2m_max[k],lo:D.temperature_2m_min[k]}));
+  }
+  const hh=[];for(let k=0;k<24&&i+k<n;k++){const v=H.temperature_2m[i+k];if(v!=null)hh.push({h:(w.lt+k)%24,t:v})}
+  if(hh.length>12){w.hourly=hh;if(now0)w.hourly[0].t=w.temp}
+  const A=L.a;
+  if(A){const i2=clamp(Math.floor((ts-A.h.time[0])/3600),0,A.h.time.length-1),ga=k=>{const v=now0&&A.c&&A.c[k]!=null?A.c[k]:(A.h[k]?A.h[k][i2]:null);return v}
+    const q=ga('us_aqi');if(q!=null){w.aqi=Math.round(q);set('pm25',ga('pm2_5'),Math.round);set('pm10',ga('pm10'),Math.round);set('o3',ga('ozone'),Math.round);set('no2',ga('nitrogen_dioxide'),Math.round);w.aqLive=true}}
+  w.live=true;w.liveT=L.t;return w;
+}
+function renderLiveBadge(){
+  const b=$('#livebadge');if(!b)return;
+  b.dataset.s=LS.loading?'load':LS.ok===true?'on':LS.ok===false?'off':'idle';
+  b.textContent=LS.loading?'Loading live data…':LS.ok===true?'Live data':LS.ok===false?'Modelled data':'Modelled data';
+  b.title=LS.ok===false?'Live weather could not be reached from this page, so values are estimates.':LS.ok===true?'Live weather and air quality from Open-Meteo, refreshed every 20 minutes.':'';
+}
+function liveChanged(){if(state.selected)renderPanel(true);if(typeof renderChip==='function')renderChip()}
+/* Load the biggest cities at start, then whatever is in view when zoomed in */
+function wantLive(){const want=[];if(state.selected)want.push(state.selected);for(const p of pins){if(want.length>=40)break;if(!want.includes(p.c))want.push(p.c)}return want}
+setInterval(()=>{if(!document.hidden)loadLive(wantLive())},2500);
+
+/* 3D globe: orthographic projection drawn on canvas. Land outlines are hand-simplified for this prototype. */
+function mkPoly(ring){let c=ring.concat([ring[0]]);if(d3.geoArea({type:'Polygon',coordinates:[c]})>2*Math.PI)c=c.slice().reverse();return[c]}
+const LAND={type:'MultiPolygon',coordinates:LAND_POLYS.map(mkPoly)};
+const LAKES={type:'MultiPolygon',coordinates:LAKE_POLYS.map(mkPoly)};
+const SPHERE={type:'Sphere'};
+const gcv=$('#globe'),ctx=gcv.getContext('2d'),scv=$('#stars'),sctx=scv.getContext('2d'),stage=$('#stage'),tip=$('#tip');
+let W=0,H=0,dpr=1,R=300,BOT=100;
+const proj=d3.geoOrthographic().clipAngle(90).precision(.6);
+const gpath=d3.geoPath(proj,ctx);
+const grat={};const gratFor=s=>grat[s]||(grat[s]=d3.geoGraticule().step([s,s])());
+
+const tempScale=d3.scaleLinear().domain([-25,-5,8,18,28,36,45]).range(['#6f8cff','#4fb0ff','#5ee0c4','#c5ea6a','#ffc94a','#ff8a3d','#ff4b5c']).clamp(true);
+const aqiScale=d3.scaleLinear().domain([0,50,100,150,200,300]).range(['#3ddc97','#3ddc97','#ffd84d','#ff9f43','#ff5c7a','#b58cff']).clamp(true);
+const windScale=d3.scaleLinear().domain([0,15,30,50]).range(['#4fd0ff','#5ee0c4','#ffc94a','#ff5cc8']).clamp(true);
+const LAYERS={
+  temp:{name:'Temperature',lo:-25,hi:45,val:w=>w.temp,col:v=>tempScale(v),alpha:()=>.34,fmt:v=>fT(v)},
+  aqi:{name:'Air quality (US AQI)',lo:0,hi:300,val:w=>w.aqi,col:v=>aqiScale(v),alpha:()=>.4,fmt:v=>String(Math.round(v))},
+  wind:{name:'Wind speed',lo:0,hi:50,val:w=>w.wind,col:v=>windScale(v),alpha:()=>.26,fmt:v=>fW(v)},
+  rain:{name:'Chance of rain',lo:0,hi:100,val:w=>w.pop,col:()=>'#5bb8ff',alpha:v=>.05+v/100*.5,fmt:v=>Math.round(v)+'%'},
+  cloud:{name:'Cloud cover',lo:0,hi:100,val:w=>w.cloud,col:()=>'#e8eefc',alpha:v=>.04+v/100*.42,fmt:v=>Math.round(v)+'%'}
+};
+function rgba(c,a){const k=d3.color(c);k.opacity=a;return k.formatRgb()}
+function renderLegend(){
+  const L=LAYERS[state.layer],st=[];
+  for(let i=0;i<=10;i++){const v=L.lo+(L.hi-L.lo)*i/10;st.push(state.layer==='rain'||state.layer==='cloud'?rgba(L.col(v),L.alpha(v)*1.6+.1):L.col(v))}
+  $('#legend').innerHTML=`<p>${L.name}</p><div class="bar" style="background:linear-gradient(90deg,${st.join(',')})"></div><div class="lbl"><span>${L.fmt(L.lo)}</span><span>${L.fmt((L.lo+L.hi)/2)}</span><span>${L.fmt(L.hi)}${state.layer==='aqi'?'+':''}</span></div>`;
+}
+function setLayer(l){state.layer=l;$('#layers').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layer===l)));renderLegend()}
+
+function drawStars(){
+  sctx.setTransform(dpr,0,0,dpr,0,0);sctx.clearRect(0,0,W,H);
+  const r=rng(7);for(let i=0;i<Math.round(W*H/2600);i++){const x=r()*W,y=r()*H,s=r();sctx.fillStyle=`rgba(${s>.8?'190,210,255':'255,255,255'},${.15+r()*.6})`;sctx.beginPath();sctx.arc(x,y,s>.93?1.3:.7,0,6.283);sctx.fill()}
+}
+function resize(){
+  dpr=Math.min(2,window.devicePixelRatio||1);W=stage.clientWidth;H=stage.clientHeight;
+  for(const c of [gcv,scv]){c.width=Math.round(W*dpr);c.height=Math.round(H*dpr)}
+  BOT=window.innerWidth<=900?118:92;R=Math.min(W,H-BOT)*(window.innerWidth<=900?.47:.485);drawStars();
+}
+new ResizeObserver(resize).observe(stage);
+
+let pins=[],lastTipId=-1;
+const KMAX=48;
+const showPinTier=k=>k>=3.6?4:k>=2.3?3:k>=1.25?2:1;
+const showLabelTier=k=>k>=5?4:k>=3.2?3:k>=1.8?2:1;
+
+function draw(now){
+  const k=state.k,r=R*k,cx=W/2,cy=(H-BOT)/2+6,L=LAYERS[state.layer];
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  proj.translate([cx,cy]).scale(r).rotate([-state.lon0,-state.lat0]);
+  // atmosphere
+  let g=ctx.createRadialGradient(cx,cy,r*.97,cx,cy,r*1.2);
+  g.addColorStop(0,'rgba(91,184,255,.5)');g.addColorStop(.35,'rgba(91,184,255,.16)');g.addColorStop(1,'rgba(91,184,255,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r*1.2,0,6.283);ctx.fill();
+  // ocean
+  g=ctx.createRadialGradient(cx-r*.3,cy-r*.35,r*.05,cx,cy,r);
+  g.addColorStop(0,'#17407a');g.addColorStop(.55,'#0d2750');g.addColorStop(1,'#050f26');
+  ctx.beginPath();gpath(SPHERE);ctx.fillStyle=g;ctx.fill();
+  // graticule
+  const gs=k>32?.5:k>20?1:k>12?2:k>6?5:k>3?10:k>1.8?15:30;
+  ctx.beginPath();gpath(gratFor(gs));ctx.strokeStyle='rgba(120,170,255,.13)';ctx.lineWidth=.7;ctx.stroke();
+  // land
+  ctx.beginPath();gpath(LAND);ctx.fillStyle='#245a74';ctx.fill();
+  ctx.strokeStyle='rgba(140,220,230,.55)';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();gpath(LAKES);ctx.fillStyle='#0d2750';ctx.fill();
+  // night side from the real sun position
+  const nd=new Date(Date.now()+state.hrs*36e5),utcH=nd.getUTCHours()+nd.getUTCMinutes()/60,sunLon=-(utcH-12)*15;
+  const anti=[sunLon+180,15.5];
+  [[98,.14],[92,.16],[88,.16]].forEach(([rad,a])=>{ctx.beginPath();gpath(d3.geoCircle().center(anti).radius(rad).precision(2)());ctx.fillStyle=`rgba(2,6,22,${a})`;ctx.fill()});
+  // limb shading + rim
+  g=ctx.createRadialGradient(cx-r*.25,cy-r*.3,r*.3,cx,cy,r);
+  g.addColorStop(0,'rgba(255,255,255,.05)');g.addColorStop(.62,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,4,16,.55)');
+  ctx.beginPath();gpath(SPHERE);ctx.fillStyle=g;ctx.fill();
+  ctx.strokeStyle='rgba(150,205,255,.4)';ctx.lineWidth=1.2;ctx.stroke();
+
+  // cities in view
+  const sl=Math.sin(state.lat0*RAD),cl=Math.cos(state.lat0*RAD),l0=state.lon0*RAD,pt=showPinTier(k),lt=showLabelTier(k);
+  pins=[];
+  for(const c of CITIES){
+    const dot=sl*Math.sin(c.la)+cl*Math.cos(c.la)*Math.cos(c.lo-l0);
+    if(dot<.03||c.tier>pt&&c!==state.selected)continue;
+    const xy=proj([c.lon,c.lat]);if(!xy)continue;
+    if(xy[0]<-40||xy[0]>W+40||xy[1]<-40||xy[1]>H+40)continue;
+    pins.push({c,x:xy[0],y:xy[1],dot});
+  }
+  const sf=R/300*Math.sqrt(k)*.8;
+  // layer blobs
+  ctx.save();
+  for(const p of pins){
+    const w=weather(p.c,state.hrs),v=L.val(w),base=[62,44,32,24][p.c.tier-1]*sf*(.45+.55*p.dot);
+    const gr=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,base),col=L.col(v),a=L.alpha(v);
+    gr.addColorStop(0,rgba(col,a));gr.addColorStop(1,rgba(col,0));
+    ctx.fillStyle=gr;ctx.beginPath();ctx.arc(p.x,p.y,base,0,6.283);ctx.fill();
+    if(state.layer==='wind'&&p.c.tier<=pt){
+      const to=(w.dir+180)*RAD,len=(8+w.wind*.55)*Math.max(.7,sf*.9);
+      ctx.strokeStyle=rgba(col,.9);ctx.lineWidth=1.6;ctx.lineCap='round';ctx.setLineDash([5,5]);ctx.lineDashOffset=-now*.02*(.4+w.wind/25);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+Math.sin(to)*len,p.y-Math.cos(to)*len);ctx.stroke();ctx.setLineDash([]);
+    }
+  }
+  ctx.restore();
+  // community report markers
+  if(state.showReports){
+    for(const rp of REPORTS){
+      const dot=sl*Math.sin(rp.lat*RAD)+cl*Math.cos(rp.lat*RAD)*Math.cos(rp.lon*RAD-l0);if(dot<.05)continue;
+      const xy=proj([rp.lon,rp.lat]);if(!xy)continue;
+      const s=6+Math.min(3,Math.sqrt(k)),col=SEV[rp.sev-1].c,x=xy[0],y=xy[1]-s-4;
+      ctx.fillStyle=col;ctx.strokeStyle='#050912';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s*.95,y+s*.7);ctx.lineTo(x-s*.95,y+s*.7);ctx.closePath();ctx.stroke();ctx.fill();
+      ctx.fillStyle='#050912';ctx.fillRect(x-.8,y-s*.3,1.6,s*.6);
+    }
+  }
+  // pins
+  const pulse=(Math.sin(now/340)+1)/2;
+  for(const p of pins){
+    const t=p.c.tier,rad=[4.4,3.6,3,2.5][t-1]+Math.min(1.5,k*.18),sel=p.c===state.selected;
+    ctx.beginPath();ctx.arc(p.x,p.y,rad,0,6.283);ctx.fillStyle=sel?'#ffb84a':'#f4f7ff';ctx.fill();ctx.lineWidth=1.4;ctx.strokeStyle='#050912';ctx.stroke();
+    if(sel){ctx.beginPath();ctx.arc(p.x,p.y,rad+5+pulse*7,0,6.283);ctx.strokeStyle=`rgba(255,184,74,${.8-pulse*.6})`;ctx.lineWidth=2;ctx.stroke()}
+  }
+  // selected free point
+  const sp=state.selected;
+  if(sp&&sp.isPoint){
+    const dot=sl*Math.sin(sp.lat*RAD)+cl*Math.cos(sp.lat*RAD)*Math.cos(sp.lon*RAD-l0),xy=dot>.03&&proj([sp.lon,sp.lat]);
+    if(xy){ctx.strokeStyle='#ffb84a';ctx.lineWidth=2;ctx.beginPath();ctx.arc(xy[0],xy[1],6+pulse*5,0,6.283);ctx.stroke();ctx.fillStyle='#ffb84a';ctx.beginPath();ctx.arc(xy[0],xy[1],3,0,6.283);ctx.fill();sp._xy=xy}else sp._xy=null;
+  }
+  // labels with simple collision rejection
+  ctx.font='500 11.5px "DM Sans",system-ui,sans-serif';ctx.textBaseline='middle';
+  const boxes=[],order=pins.filter(p=>p.c.tier<=lt||p.c===state.selected||p.c===state.hover).sort((a,b)=>(b.c===state.selected)-(a.c===state.selected)||(b.c===state.hover)-(a.c===state.hover)||a.c.tier-b.c.tier);
+  for(const p of order){
+    const w=weather(p.c,state.hrs),txt=p.c.name,tt=fT(w.temp),tw=ctx.measureText(txt).width,t2=ctx.measureText(tt).width,bw=tw+t2+20,bh=18,bx=p.x+9,by=p.y-bh/2;
+    if(bx+bw>W-4)continue;
+    const force=p.c===state.selected||p.c===state.hover;
+    if(!force&&boxes.some(b=>bx<b[0]+b[2]+3&&bx+bw+3>b[0]&&by<b[1]+b[3]+2&&by+bh+2>b[1]))continue;
+    boxes.push([bx,by,bw,bh]);
+    ctx.fillStyle='rgba(5,9,18,.72)';ctx.beginPath();ctx.roundRect(bx,by,bw,bh,9);ctx.fill();
+    ctx.fillStyle=force?'#fff':'#dbe5ff';ctx.textAlign='left';ctx.fillText(txt,bx+8,p.y+.5);
+    ctx.fillStyle='#ffb84a';ctx.fillText(tt,bx+tw+14,p.y+.5);
+  }
+  // hover tooltip
+  if(state.hover&&!state.dragging){
+    const hp=pins.find(p=>p.c===state.hover);
+    if(hp){
+      if(lastTipId!==hp.c.id+':'+state.hrs){const w=weather(hp.c,state.hrs);tip.innerHTML=`<b>${esc(hp.c.name)}</b> <span>${esc(hp.c.country)}</span><br><span>${w.cond} · ${fT(w.temp)} · AQI ${w.aqi} · ${fW(w.wind)}</span>`;lastTipId=hp.c.id+':'+state.hrs}
+      tip.hidden=false;tip.style.left=Math.min(hp.x,W-250)+'px';tip.style.top=(hp.y+30)+'px';
+    }else tip.hidden=true;
+  }else{tip.hidden=true;lastTipId=-1}
+  const span=Math.round(W*6371/r*Math.PI/Math.PI);$('#zoomread').textContent=k.toFixed(1)+'× · '+pins.length+' places · view ≈ '+(span>=100?Math.round(span/10)*10:span)+' km wide';
+}
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  const f=state.fly;
+  if(f){
+    const kk=1-Math.exp(-dt*5);let dl=((f.lon-state.lon0+540)%360)-180;
+    state.lon0+=dl*kk;state.lat0+=(f.lat-state.lat0)*kk;state.kT=f.k;state.k+=(f.k-state.k)*kk;
+    if(Math.abs(dl)<.05&&Math.abs(f.lat-state.lat0)<.05&&Math.abs(f.k-state.k)<.015)state.fly=null;
+  }else{
+    state.k+=(state.kT-state.k)*(1-Math.exp(-dt*9));
+    if(!state.dragging){
+      if(Math.abs(state.vx)>.002||Math.abs(state.vy)>.002){state.lon0+=state.vx;state.lat0+=state.vy;state.vx*=.93;state.vy*=.93}
+      else if(state.spin&&state.k<2.6&&now-state.lastInteract>1200)state.lon0+=5*dt;
+    }
+  }
+  state.lon0=((state.lon0+540)%360)-180;state.lat0=clamp(state.lat0,-85,85);
+  if(W>0)draw(now);
+  requestAnimationFrame(frame);
+}
+
+function pickPin(x,y,maxD){let best=null,bd=maxD||14;for(const p of pins){const d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;best=p.c}}return best}
+function pickPoint(x,y){
+  const cx=W/2,cy=(H-BOT)/2+6,r=R*state.k;if(Math.hypot(x-cx,y-cy)>r)return null;
+  const ll=proj.invert([x,y]);return ll&&isFinite(ll[0])&&isFinite(ll[1])?ll:null;
+}
+function nearestCity(lat,lon){let b=null,bd=1e9;for(const c of CITIES){const d=km({lat,lon},c);if(d<bd){bd=d;b=c}}return{c:b,d:bd}}
+function pointPlace(ll){
+  const lon=((ll[0]+540)%360)-180,lat=ll[1],n=nearestCity(lat,lon),land=d3.geoContains(LAND,[lon,lat])&&!d3.geoContains(LAKES,[lon,lat]);
+  return{name:land?'Near '+n.c.name:'Open waters',country:Math.round(n.d).toLocaleString('en')+' km from '+n.c.name,lat,lon,tier:4,isPoint:true,key:'pt:'+lat.toFixed(1)+','+lon.toFixed(1),aqiBase:land?16+hash(lat.toFixed(1)+lon.toFixed(1))%40:8,cc:n.c.cc};
+}
+function flyTo(lon,lat,k){state.fly={lon,lat,k:clamp(k,1,KMAX)};state.vx=state.vy=0}
+function setSpin(on){state.spin=on;const b=$('#b-spin');b.setAttribute('aria-pressed',String(on));b.innerHTML=on?'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';b.title=b.ariaLabel=on?'Pause auto-rotate':'Resume auto-rotate'}
+function select(p,opt){
+  state.selected=p;renderPanel();setHash(p);loadLive([p]);
+  if(!opt||opt.fly!==false){flyTo(p.lon,p.lat,Math.max(state.kT,p.isPoint?2.4:[2.2,2.6,3.6,5][p.tier-1]));setSpin(false)}
+}
+
+/* Interaction: drag, pinch, wheel, keys, search, units, layers, report form */
+const ptrs=new Map();let drag=null,pinch=null;
+const rel=e=>{const b=gcv.getBoundingClientRect();return[e.clientX-b.left,e.clientY-b.top]};
+const touch=()=>{state.lastInteract=performance.now();state.fly=null};
+gcv.addEventListener('pointerdown',e=>{
+  gcv.setPointerCapture(e.pointerId);const[x,y]=rel(e);ptrs.set(e.pointerId,{x,y});touch();$('#hint').classList.add('gone');
+  if(ptrs.size===1){drag={sx:x,sy:y,lx:x,ly:y,moved:false};state.dragging=true;state.vx=state.vy=0;gcv.classList.add('dragging')}
+  else if(ptrs.size===2){const[a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),k:state.kT};drag=null}
+});
+gcv.addEventListener('pointermove',e=>{
+  const[x,y]=rel(e);
+  if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x,y});
+  if(pinch&&ptrs.size>=2){const[a,b]=[...ptrs.values()];state.kT=state.k=clamp(pinch.k*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d,1,KMAX);touch();return}
+  if(drag){
+    const dx=x-drag.lx,dy=y-drag.ly,s=1/(R*state.k)/RAD;
+    if(Math.hypot(x-drag.sx,y-drag.sy)>4)drag.moved=true;
+    if(drag.moved){state.lon0-=dx*s;state.lat0+=dy*s;state.vx=-dx*s;state.vy=dy*s;touch()}
+    drag.lx=x;drag.ly=y;return;
+  }
+  if(e.pointerType==='mouse'){const h=pickPin(x,y,12);state.hover=h;gcv.classList.toggle('pointer',!!h)}
+});
+function endPtr(e){
+  const[x,y]=rel(e);ptrs.delete(e.pointerId);
+  if(pinch&&ptrs.size<2)pinch=null;
+  if(drag&&ptrs.size===0){
+    const d=drag;drag=null;state.dragging=false;gcv.classList.remove('dragging');
+    if(!d.moved&&e.type==='pointerup'){
+      state.vx=state.vy=0;
+      const c=pickPin(x,y,16);
+      if(c)select(c);else{const ll=pickPoint(x,y);if(ll)select(pointPlace(ll))}
+    }
+  }
+}
+gcv.addEventListener('pointerup',endPtr);
+gcv.addEventListener('pointercancel',endPtr);
+gcv.addEventListener('pointerleave',()=>{if(!state.dragging){state.hover=null;gcv.classList.remove('pointer')}});
+gcv.addEventListener('wheel',e=>{e.preventDefault();touch();
+  const f=Math.exp(-e.deltaY*.0018);
+  if(f>1&&state.kT>1.5){const[x,y]=rel(e),ll=proj.invert([x,y]);if(ll&&isFinite(ll[0])){const a=Math.min(.22,(f-1)*3);state.lon0+=((ll[0]-state.lon0+540)%360-180)*a;state.lat0+=(ll[1]-state.lat0)*a;state.fly=null}}
+  state.kT=clamp(state.kT*f,1,KMAX)},{passive:false});
+stage.addEventListener('keydown',e=>{
+  const st=10/state.k;let h=true;
+  if(e.key==='ArrowLeft')state.lon0-=st;else if(e.key==='ArrowRight')state.lon0+=st;else if(e.key==='ArrowUp')state.lat0+=st;else if(e.key==='ArrowDown')state.lat0-=st;
+  else if(e.key==='+'||e.key==='=')state.kT=clamp(state.kT*1.4,1,KMAX);else if(e.key==='-')state.kT=clamp(state.kT/1.4,1,KMAX);
+  else h=false;
+  if(h){e.preventDefault();touch()}
+});
+$('#b-in').onclick=()=>{touch();const nk=clamp(state.kT*1.6,1,KMAX),s=state.selected;if(s&&nk>3)flyTo(s.lon,s.lat,nk);else state.kT=nk};
+$('#b-out').onclick=()=>{touch();state.kT=clamp(state.kT/1.6,1,KMAX)};
+$('#b-reset').onclick=()=>{flyTo(state.lon0,18,1);setSpin(true);state.lastInteract=0};
+$('#b-spin').onclick=()=>{setSpin(!state.spin);state.lastInteract=performance.now()};
+$('#b-rep').onclick=e=>{state.showReports=!state.showReports;e.currentTarget.setAttribute('aria-pressed',String(state.showReports))};
+$('#chip').onclick=()=>{$('#panel').scrollIntoView({behavior:'smooth',block:'start'})};
+$('#layers').addEventListener('click',e=>{const b=e.target.closest('button[data-layer]');if(b)setLayer(b.dataset.layer)});
+
+function setUnits(metric){U.metric=metric;$('#u-metric').setAttribute('aria-pressed',String(metric));$('#u-imp').setAttribute('aria-pressed',String(!metric));renderPanel();renderLegend()}
+$('#u-metric').onclick=()=>setUnits(true);$('#u-imp').onclick=()=>setUnits(false);
+$('#legend');
+
+/* Search */
+const q=$('#q'),resBox=$('#results');let resItems=[],resIdx=-1;
+const coordRe=/^\s*(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/;
+const norm=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+function runSearch(){
+  const v=norm(q.value.trim());resItems=[];
+  if(v){
+    const cm=q.value.match(coordRe);
+    if(cm&&Math.abs(+cm[1])<=90&&Math.abs(+cm[2])<=180)resItems.push({coord:[+cm[2],+cm[1]],label:'Go to '+fLL(+cm[1],+cm[2]),sub:'coordinates'});
+    const hits=CITIES.map(c=>{const n=norm(c.name),co=norm(c.country),rg=norm(c.region||'');return{c,s:n.startsWith(v)?0:n.includes(v)?1:rg.startsWith(v)?2:co.startsWith(v)?3:rg.includes(v)?4:co.includes(v)?5:9}}).filter(x=>x.s<9).sort((a,b)=>a.s-b.s||a.c.tier-b.c.tier||(b.c.pop||0)-(a.c.pop||0)).slice(0,10);
+    hits.forEach(h=>resItems.push({c:h.c,label:h.c.name,sub:(h.c.region?h.c.region+', ':'')+h.c.country}));
+  }
+  resIdx=resItems.length?0:-1;
+  resBox.innerHTML=resItems.map((r,i)=>`<li role="option" id="opt${i}" data-i="${i}" aria-selected="${i===resIdx}"><span>${esc(r.label)}</span><small>${esc(r.sub)}</small></li>`).join('')||(v?'<li style="cursor:default"><span>No match. Try a nearby city or type lat, lon.</span></li>':'');
+  resBox.hidden=!v;q.setAttribute('aria-expanded',String(!!v));
+}
+function pickResult(i){
+  const r=resItems[i];if(!r)return;
+  if(r.c)select(r.c);else select(pointPlace(r.coord));
+  q.value='';resBox.hidden=true;q.setAttribute('aria-expanded','false');q.blur();
+}
+q.addEventListener('input',runSearch);
+q.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){if(!resItems.length)return;e.preventDefault();resIdx=(resIdx+(e.key==='ArrowDown'?1:-1)+resItems.length)%resItems.length;resBox.querySelectorAll('li').forEach((li,i)=>li.setAttribute('aria-selected',String(i===resIdx)))}
+  else if(e.key==='Enter'){e.preventDefault();pickResult(Math.max(0,resIdx))}
+  else if(e.key==='Escape'){q.value='';runSearch()}
+});
+resBox.addEventListener('mousedown',e=>{const li=e.target.closest('li[data-i]');if(li){e.preventDefault();pickResult(+li.dataset.i)}});
+q.addEventListener('blur',()=>setTimeout(()=>{resBox.hidden=true},120));
+q.addEventListener('focus',()=>{if(q.value)runSearch()});
+
+/* Panel clicks: report button and "Same here" */
+$('#panel').addEventListener('click',e=>{
+  if(e.target.closest('#panel-report'))return openReport();
+  const qk=e.target.closest('button[data-quick]');
+  if(qk){const q=QUICK[+qk.dataset.quick],p=state.selected,now=Date.now();QLAST[p.key]=QLAST[p.key]||{};if(now-(QLAST[p.key][q.l]||0)<6e5){toast('You already sent that for '+p.name+' a moment ago.');return}QLAST[p.key][q.l]=now;
+    postReport({place:p.name,lat:p.lat,lon:p.lon,cat:q.cat,sev:q.sev,text:'Quick report: '+q.l.toLowerCase()+' in '+p.name+' right now.',t:now,quick:1},false);return}
+  if(e.target.closest('#open-feed')){openFeed();return}
+  if(e.target.closest('#open-help')){openHelp();return}
+  const go=e.target.closest('button[data-go]');if(go)return select(CITIES[+go.dataset.go]);
+  const act=e.target.closest('button[data-act]');
+  if(act){if(act.dataset.act==='save')toggleSaved(state.selected);else toggleCmp(state.selected);return}
+  const sm=e.target.closest('button[data-same]');
+  if(sm){
+    const id=sm.dataset.same,r=REPORTS.find(x=>x.id===id);if(!r)return;
+    if(r.shared&&DBH&&UID){
+      const ref=DBH.doc('confirms/'+id+'__'+UID);
+      (repMine(r)?ref.delete():ref.set({rid:id,uid:UID,t:Date.now()})).catch(()=>toast('Could not save your confirmation. Try again.'));
+    }else{confirmed.has(id)?confirmed.delete(id):confirmed.add(id);renderPanel(true)}
+    return;
+  }
+  const cp=e.target.closest('button[data-copy]');
+  if(cp){
+    const r=REPORTS.find(x=>x.id===cp.dataset.copy);if(!r)return;
+    const txt=reportText(r)+'\n\n'+helpFor((nearestCity(r.lat,r.lon).c||{}).cc);
+    (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Copied. Paste it into your city helpline app, email or message.')).catch(()=>toast('Copy was blocked here. Select the report text and copy it manually.'));
+    return;
+  }
+  const del=e.target.closest('button[data-del]');
+  if(del&&DBH){const id=del.dataset.del;DBH.doc('reports/'+id).delete().then(()=>DBH.doc('status/'+id).delete()).catch(()=>toast('Could not delete that report.'));return}
+});
+$('#panel').addEventListener('change',e=>{
+  const s=e.target.closest('select[data-status]');
+  if(s&&DBH)DBH.doc('status/'+s.dataset.status).set({status:s.value}).catch(()=>toast('Only editors can change a report status.'));
+});
+
+/* Saved places popover and compare modal */
+const savedPop=$('#saved-pop'),cmpModal=$('#cmpmodal');
+$('#open-saved').onclick=e=>{e.stopPropagation();renderSaved();const open=savedPop.hidden;savedPop.hidden=!open;e.currentTarget.setAttribute('aria-expanded',String(open))};
+document.addEventListener('click',e=>{if(!savedPop.hidden&&!e.target.closest('#saved-pop')&&!e.target.closest('#open-saved'))savedPop.hidden=true});
+savedPop.addEventListener('click',e=>{
+  const o=e.target.closest('button[data-open]'),x=e.target.closest('button[data-rm]');
+  if(o){const p=resolveKey(o.dataset.open);if(p){savedPop.hidden=true;select(p)}}
+  if(x){SAVED=SAVED.filter(k=>k!==x.dataset.rm);saveSaved();renderSaved();renderPanel(true)}
+});
+function openCmp(){$('#cmpbody').innerHTML=cmpHTML();cmpModal.hidden=false;$('#cmp-close').focus()}
+$('#open-cmp').onclick=openCmp;
+$('#cmp-close').onclick=()=>{cmpModal.hidden=true};
+cmpModal.addEventListener('mousedown',e=>{if(e.target===cmpModal)cmpModal.hidden=true});
+$('#cmpbody').addEventListener('click',e=>{const r=e.target.closest('button[data-cmp-rm]');if(r){state.cmp=state.cmp.filter(k=>k!==r.dataset.cmpRm);renderCmpBtn();renderPanel(true);if(state.cmp.length<1)cmpModal.hidden=true;else $('#cmpbody').innerHTML=cmpHTML()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){cmpModal.hidden=true;savedPop.hidden=true}});
+
+/* Report form */
+const modal=$('#modal'),form=$('#repform');let photoData=null,lastFocus=null;
+$('#rep-cats').innerHTML=CATS.map((c,i)=>`<label><input type="radio" name="rcat" value="${c.id}"${i===0?' checked':''}>${catIcon(c.id)}<span>${c.l}</span></label>`).join('');
+function sevUpdate(){const s=SEV[+$('#rep-sev').value-1];const o=$('#rep-sevout');o.textContent=s.l;o.style.color=s.c}
+$('#rep-sev').addEventListener('input',sevUpdate);
+$('#rep-desc').addEventListener('input',e=>{$('#rep-count').textContent=e.target.value.length+' / 280'});
+$('#rep-photo').addEventListener('change',e=>{
+  const f=e.target.files[0],th=$('#rep-thumb');photoData=null;th.hidden=true;
+  if(!f)return;
+  if(f.size>3e6){$('#rep-err').textContent='That photo is over 3 MB. Choose a smaller one.';e.target.value='';return}
+  const rd=new FileReader();rd.onload=()=>{
+    const im=new Image();im.onload=()=>{const s=Math.min(1,480/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);photoData=c.toDataURL('image/jpeg',.6);th.src=photoData;th.hidden=false;$('#rep-err').textContent=''};
+    im.src=rd.result};rd.readAsDataURL(f);
+});
+function openReport(){
+  lastFocus=document.activeElement;const p=state.selected;
+  form.reset();photoData=null;$('#rep-thumb').hidden=true;$('#rep-err').textContent='';$('#rep-count').textContent='0 / 280';
+  $('#rep-place').value=p.name;$('#rep-help').textContent=helpFor(p.cc);sevUpdate();modal.hidden=false;$('#rep-cats input:checked').focus();
+}
+function closeReport(){modal.hidden=true;if(lastFocus&&lastFocus.focus)lastFocus.focus()}
+$('#open-report').onclick=openReport;$('#rep-cancel').onclick=closeReport;
+modal.addEventListener('mousedown',e=>{if(e.target===modal)closeReport()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeReport()});
+let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true},3400)}
+function postReport(rep,fromForm){
+  const place=rep.place;
+  state.showReports=true;$('#b-rep').setAttribute('aria-pressed','true');
+  const done=()=>{if(fromForm)closeReport()};
+  const local=(m)=>{LOCAL.unshift(Object.assign({id:'u'+Date.now(),n:0,ex:0},rep));saveLocal();rebuildReports();done();renderPanel(true);toast(m)};
+  if(DBH&&CAN_WRITE){
+    DBH.collection('reports').add(rep).then(()=>{done();toast('Report posted for '+place+'. Everyone viewing this page can see it.')}).catch(()=>local('Saved on this device only. Ask the page owner to share it as Contributor so reports reach everyone.'));
+  }else local('Report posted for '+place+'. It is saved in this browser and shows on your globe.');
+}
+form.addEventListener('submit',e=>{
+  e.preventDefault();
+  const text=$('#rep-desc').value.trim(),place=$('#rep-place').value.trim()||state.selected.name;
+  if(text.length<10){$('#rep-err').textContent='Describe what you see in at least 10 characters so others can act on it.';$('#rep-desc').focus();return}
+  const p=state.selected;
+  const rep={place,lat:p.lat,lon:p.lon,cat:form.rcat.value,sev:+$('#rep-sev').value,text,t:Date.now()};
+  if(photoData&&photoData.length<200000)rep.photo=photoData;
+  postReport(rep,true);
+});
+
+const QLAST={};
+const feedModal=$('#feedmodal'),helpModal=$('#helpmodal');let feedCat='';
+function renderFeed(){$('#feedchips').innerHTML=['',...CATS.map(c=>c.id)].map(id=>`<button type="button" aria-pressed="${feedCat===id}" data-fc="${id}">${id?catById(id).l:'All'}</button>`).join('');$('#feedlist').innerHTML=feedHTML(feedCat)}
+function openFeed(){renderFeed();feedModal.hidden=false;$('#feed-close').focus()}
+function openHelp(){$('#helplist').innerHTML=helpListHTML('');$('#helpq').value='';helpModal.hidden=false;$('#helpq').focus()}
+$('#feed-close').onclick=()=>{feedModal.hidden=true};$('#help-close').onclick=()=>{helpModal.hidden=true};
+$('#feedchips').addEventListener('click',e=>{const b=e.target.closest('[data-fc]');if(!b)return;feedCat=b.dataset.fc;renderFeed()});
+$('#feedlist').addEventListener('click',e=>{const b=e.target.closest('[data-feed]');if(!b)return;const r=REPORTS.find(x=>x.id===b.dataset.feed);if(!r)return;feedModal.hidden=true;const n=nearestCity(r.lat,r.lon).c;if(n)select(n)});
+$('#helpq').addEventListener('input',e=>{$('#helplist').innerHTML=helpListHTML(e.target.value)});
+[feedModal,helpModal].forEach(m=>m.addEventListener('mousedown',e=>{if(e.target===m)m.hidden=true}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){feedModal.hidden=true;helpModal.hidden=true}});
+$('#open-help-top').onclick=openHelp;
+/* Boot: Pune selected, globe turned to show South Asia while it spins */
+setLayer('temp');setSpin(!matchMedia('(prefers-reduced-motion: reduce)').matches);
+state.selected=CITIES.find(c=>c.name==='Pune');state.lon0=40;state.lat0=18;
+rebuildReports();renderSaved();renderCmpBtn();updHrs();
+if(!fromHash())renderPanel();
+resize();requestAnimationFrame(frame);
+renderLiveBadge();initShared();
+
+})();
+</script>
+</body></html>
