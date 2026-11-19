@@ -1,4 +1,4 @@
-const state={layer:'temp',hrs:0,cmp:[],lon0:60,lat0:18,k:1,kT:1,spin:true,selected:null,hover:null,showReports:true,lastInteract:0,fly:null,vx:0,vy:0,dragging:false};
+const state={layer:'temp',hrs:0,cmp:[],lon0:60,lat0:18,k:1,kT:1,spin:true,selected:null,hover:null,showReports:true,clouds:false,lastInteract:0,fly:null,vx:0,vy:0,dragging:false};
 const ago=ms=>{const m=Math.round((Date.now()-ms)/60000);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.round(m/60);return h<24?h+' h ago':Math.round(h/24)+' d ago'};
 
 /* Community reports. Shared reports live in the page database when the viewer can use it.

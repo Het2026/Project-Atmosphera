@@ -62,6 +62,7 @@ function draw(now){
   ctx.beginPath();gpath(LAND);ctx.fillStyle='#245a74';ctx.fill();
   ctx.strokeStyle='rgba(140,220,230,.55)';ctx.lineWidth=1;ctx.stroke();
   ctx.beginPath();gpath(LAKES);ctx.fillStyle='#0d2750';ctx.fill();
+  if(state.layer==='cloud'||state.clouds)drawClouds(now,r,cx,cy,Math.sin(state.lat0*RAD),Math.cos(state.lat0*RAD),state.lon0*RAD);
   // night side from the real sun position
   const nd=new Date(Date.now()+state.hrs*36e5),utcH=nd.getUTCHours()+nd.getUTCMinutes()/60,sunLon=-(utcH-12)*15;
   const anti=[sunLon+180,15.5];

@@ -328,6 +328,7 @@ a.chipbtn{text-decoration:none}
         <button type="button" id="b-in" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
         <button type="button" id="b-out" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
         <button type="button" id="b-reset" aria-label="Reset view" title="Reset view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></button>
+        <button type="button" id="b-cloud" aria-pressed="false" aria-label="Show moving clouds on any layer" title="Moving clouds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7 9.5 4.3 4.3 0 0 0 7 18z"/></svg></button>
         <button type="button" id="b-rep" aria-pressed="true" aria-label="Show community reports on the globe" title="Show community reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/></svg></button>
       </div>
       <div class="zoomread" id="zoomread"></div>
@@ -995,7 +996,7 @@ const catById=id=>CATS.find(c=>c.id===id)||CATS[0];
 const catIcon=id=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${catById(id).d}"/></svg>`;
 const SEV=[{l:'Minor',c:'#3ddc97'},{l:'Moderate',c:'#ffd84d'},{l:'Severe',c:'#ff9f43'},{l:'Critical',c:'#ff5c7a'}];
 
-const state={layer:'temp',hrs:0,cmp:[],lon0:60,lat0:18,k:1,kT:1,spin:true,selected:null,hover:null,showReports:true,lastInteract:0,fly:null,vx:0,vy:0,dragging:false};
+const state={layer:'temp',hrs:0,cmp:[],lon0:60,lat0:18,k:1,kT:1,spin:true,selected:null,hover:null,showReports:true,clouds:false,lastInteract:0,fly:null,vx:0,vy:0,dragging:false};
 const ago=ms=>{const m=Math.round((Date.now()-ms)/60000);if(m<1)return 'just now';if(m<60)return m+' min ago';const h=Math.round(m/60);return h<24?h+' h ago':Math.round(h/24)+' d ago'};
 
 /* Community reports. Shared reports live in the page database when the viewer can use it.
@@ -1486,6 +1487,53 @@ function liveChanged(){if(state.selected)renderPanel(true);if(typeof renderChip=
 function wantLive(){const want=[];if(state.selected)want.push(state.selected);for(const p of pins){if(want.length>=40)break;if(!want.includes(p.c))want.push(p.c)}return want}
 setInterval(()=>{if(!document.hidden)loadLive(wantLive())},2500);
 
+/* Moving cloud layer: drifting noise, shaped by the cloud cover of the cities (live when available). Motion is accelerated and illustrative. */
+const CN={W:360,H:181,d:null,cov:null,key:''};
+function buildCloudNoise(){
+  const W=CN.W,H=CN.H,d=new Float32Array(W*H),r=rng(4242);
+  [[12,6,1],[24,12,.55],[48,24,.3],[96,48,.16]].forEach(([nx,ny,amp])=>{
+    const lat=new Float32Array(nx*(ny+1));for(let i=0;i<lat.length;i++)lat[i]=r();
+    for(let y=0;y<H;y++){const fy=y/(H-1)*ny,y0=Math.floor(fy),ty=fy-y0,sy=ty*ty*(3-2*ty),y1=Math.min(ny,y0+1);
+      for(let x=0;x<W;x++){const fx=x/W*nx,x0=Math.floor(fx)%nx,tx=fx-Math.floor(fx),sx=tx*tx*(3-2*tx),x1=(x0+1)%nx;
+        const a=lat[y0*nx+x0],b=lat[y0*nx+x1],c=lat[y1*nx+x0],e=lat[y1*nx+x1];
+        d[y*W+x]+=amp*((a+(b-a)*sx)*(1-sy)+(c+(e-c)*sx)*sy)}}
+  });
+  let mn=1e9,mx=-1e9;for(const v of d){if(v<mn)mn=v;if(v>mx)mx=v}
+  for(let i=0;i<d.length;i++)d[i]=(d[i]-mn)/(mx-mn);
+  CN.d=d;
+}
+function cnSample(lon,lat){
+  const W=CN.W,H=CN.H,x=((lon%360)+360)%360,y=clamp(lat+90,0,180),x0=Math.floor(x),y0=Math.min(H-2,Math.floor(y)),tx=x-x0,ty=y-y0,x1=(x0+1)%W,d=CN.d;
+  return (d[y0*W+x0]*(1-tx)+d[y0*W+x1]*tx)*(1-ty)+(d[(y0+1)*W+x0]*(1-tx)+d[(y0+1)*W+x1]*tx)*ty;
+}
+const CSTEP=2,CSPRITE=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,"rgba(236,243,255,1)");gr.addColorStop(.5,"rgba(236,243,255,.5)");gr.addColorStop(1,"rgba(236,243,255,0)");g.fillStyle=gr;g.fillRect(0,0,64,64);return c})();
+function cloudCover(){
+  const key=liveVer+':'+state.hrs+':'+Math.floor(Date.now()/9e4);if(CN.key===key&&CN.cov)return CN.cov;
+  const nx=Math.round(360/CSTEP),ny=Math.round(180/CSTEP)+1,cov=new Float32Array(nx*ny),pts=CITIES.map(c=>({lo:c.lon,la:c.lat,v:weather(c,state.hrs).cloud/100}));
+  for(let j=0;j<ny;j++){const la=-90+j*CSTEP,cs=Math.max(.2,Math.cos(la*RAD));
+    for(let i=0;i<nx;i++){const lo=-180+i*CSTEP;let sw=0,sv=0;
+      for(const p of pts){let dl=Math.abs(p.lo-lo);if(dl>180)dl=360-dl;const dx=dl*cs,dy=p.la-la,d2=dx*dx+dy*dy+4;if(d2>3600)continue;const wgt=1/(d2*d2);sw+=wgt;sv+=wgt*p.v}
+      cov[j*nx+i]=sw?sv/sw:.45}}
+  CN.cov=cov;CN.key=key;return cov;
+}
+function drawClouds(now,r,cx,cy,sl,cl,l0){
+  if(!CN.d)buildCloudNoise();
+  const cov=cloudCover(),nx=Math.round(360/CSTEP),t=now/1000,rad=r*CSTEP*RAD*1.25,s1=t*1.3,s2=-t*.55;
+  ctx.save();
+  for(let la=-87;la<=87;la+=CSTEP){
+    const sla=Math.sin(la*RAD),cla=Math.cos(la*RAD),j=Math.round((la+90)/CSTEP);
+    for(let lo=-180;lo<180;lo+=CSTEP){
+      const dot=sl*sla+cl*cla*Math.cos(lo*RAD-l0);if(dot<.02)continue;
+      const xy=proj([lo,la]);if(!xy)continue;const x=xy[0],y=xy[1];
+      if(x<-rad||x>W+rad||y<-rad||y>H+rad)continue;
+      const n=cnSample(lo-s1,la)*.68+cnSample(lo-s2+90,la*.9)*.32,c=cov[j*nx+Math.round((lo+180)/CSTEP)%nx],th=1.02-c*.62-.1,a=clamp((n-th)/.2,0,1)*.62*(.3+.7*dot);
+      if(a<.04)continue;
+      ctx.globalAlpha=a;ctx.drawImage(CSPRITE,x-rad,y-rad,rad*2,rad*2);
+    }
+  }
+  ctx.restore();
+}
+
 /* 3D globe: orthographic projection drawn on canvas. Land outlines are hand-simplified for this prototype. */
 function mkPoly(ring){let c=ring.concat([ring[0]]);if(d3.geoArea({type:'Polygon',coordinates:[c]})>2*Math.PI)c=c.slice().reverse();return[c]}
 const LAND={type:'MultiPolygon',coordinates:LAND_POLYS.map(mkPoly)};
@@ -1550,6 +1598,7 @@ function draw(now){
   ctx.beginPath();gpath(LAND);ctx.fillStyle='#245a74';ctx.fill();
   ctx.strokeStyle='rgba(140,220,230,.55)';ctx.lineWidth=1;ctx.stroke();
   ctx.beginPath();gpath(LAKES);ctx.fillStyle='#0d2750';ctx.fill();
+  if(state.layer==='cloud'||state.clouds)drawClouds(now,r,cx,cy,Math.sin(state.lat0*RAD),Math.cos(state.lat0*RAD),state.lon0*RAD);
   // night side from the real sun position
   const nd=new Date(Date.now()+state.hrs*36e5),utcH=nd.getUTCHours()+nd.getUTCMinutes()/60,sunLon=-(utcH-12)*15;
   const anti=[sunLon+180,15.5];
@@ -1720,6 +1769,7 @@ $('#b-in').onclick=()=>{touch();const nk=clamp(state.kT*1.6,1,KMAX),s=state.sele
 $('#b-out').onclick=()=>{touch();state.kT=clamp(state.kT/1.6,1,KMAX)};
 $('#b-reset').onclick=()=>{flyTo(state.lon0,18,1);setSpin(true);state.lastInteract=0};
 $('#b-spin').onclick=()=>{setSpin(!state.spin);state.lastInteract=performance.now()};
+$('#b-cloud').onclick=e=>{state.clouds=!state.clouds;e.currentTarget.setAttribute('aria-pressed',String(state.clouds));toast(state.clouds?'Moving clouds on. Motion is sped up and illustrative.':'Moving clouds off.')};
 $('#b-rep').onclick=e=>{state.showReports=!state.showReports;e.currentTarget.setAttribute('aria-pressed',String(state.showReports))};
 $('#chip').onclick=()=>{$('#panel').scrollIntoView({behavior:'smooth',block:'start'})};
 $('#layers').addEventListener('click',e=>{const b=e.target.closest('button[data-layer]');if(b)setLayer(b.dataset.layer)});

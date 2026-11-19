@@ -7,7 +7,7 @@ A weather and air quality web app built around a 3D globe you can spin, zoom and
 ## Features
 
 - **3D globe:** rotatable 360° globe with 400+ cities (including many Indian, US and Canadian cities), drag, pinch or scroll to zoom up to 48×, real day and night shadow, keyboard controls.
-- **Layers:** temperature, air quality, wind, rain and clouds, with a 48-hour time slider and play button.
+- **Layers:** temperature, air quality, wind, rain and clouds, with animated moving clouds (cloud button), plus a 48-hour time slider and play button.
 - **City details:** current conditions, 24-hour chart, 7-day forecast, air quality (US AQI), wind, UV, sunrise and sunset, "What to do today" advice and alerts, best months to visit.
 - **Saved places and compare:** star cities and compare them side by side.
 - **Community reports:** report weather, air quality, flooding, buildings, roads and more, with severity, photo, "I see this too" confirmations and report status.
@@ -54,6 +54,7 @@ src/land.js     simplified coastline shapes
 src/cities*.js  city lists
 src/engine.js   weather model, units, report categories
 src/live.js     Open-Meteo live data
+src/clouds.js   moving cloud layer
 src/panel.js    city detail panel
 src/features.js alerts, advice, saved places, compare, time slider
 src/helplines.js emergency numbers and quick reports

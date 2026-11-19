@@ -49,6 +49,7 @@ $('#b-in').onclick=()=>{touch();const nk=clamp(state.kT*1.6,1,KMAX),s=state.sele
 $('#b-out').onclick=()=>{touch();state.kT=clamp(state.kT/1.6,1,KMAX)};
 $('#b-reset').onclick=()=>{flyTo(state.lon0,18,1);setSpin(true);state.lastInteract=0};
 $('#b-spin').onclick=()=>{setSpin(!state.spin);state.lastInteract=performance.now()};
+$('#b-cloud').onclick=e=>{state.clouds=!state.clouds;e.currentTarget.setAttribute('aria-pressed',String(state.clouds));toast(state.clouds?'Moving clouds on. Motion is sped up and illustrative.':'Moving clouds off.')};
 $('#b-rep').onclick=e=>{state.showReports=!state.showReports;e.currentTarget.setAttribute('aria-pressed',String(state.showReports))};
 $('#chip').onclick=()=>{$('#panel').scrollIntoView({behavior:'smooth',block:'start'})};
 $('#layers').addEventListener('click',e=>{const b=e.target.closest('button[data-layer]');if(b)setLayer(b.dataset.layer)});

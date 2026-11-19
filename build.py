@@ -7,7 +7,7 @@ import pathlib
 
 root = pathlib.Path(__file__).parent
 src = root / "src"
-order = ["land", "cities", "cities2", "engine", "panel", "features", "helplines", "live", "globe", "ui"]
+order = ["land", "cities", "cities2", "engine", "panel", "features", "helplines", "live", "clouds", "globe", "ui"]
 
 app = "(function(){'use strict';\n" + "\n".join((src / f"{n}.js").read_text() for n in order) + "\n})();"
 shell = (src / "shell.html").read_text()
